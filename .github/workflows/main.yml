@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SuperFancyInteropMod-${{ steps.get_version.outputs.version }}
-          path: Output/SuperFancyInteropMod.zip
+          path: hk-mods/SuperFancyInteropMod/Output/SuperFancyInteropMod.zip
 
       # - name: Create release
       #   id: create_release
