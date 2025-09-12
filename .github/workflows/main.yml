@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build and create release
+    name: Build SuperFancyInteropMod
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,11 +41,11 @@ jobs:
 
       - name: Get SHA256 of zipped mod
         id: get_hash
-        run: echo "::set-output name=hash::$(sha256sum Output/SuperFancyInteropMod.zip | cut -d ' ' -f 1)"
+        run: echo "name=hash::$(sha256sum Output/SuperFancyInteropMod.zip | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
 
       - name: Get Assembly version
         id: get_version
-        run: echo "::set-output name=version::$(cat < Version.txt)"
+        run: echo "name=version::$(cat < Version.txt)" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

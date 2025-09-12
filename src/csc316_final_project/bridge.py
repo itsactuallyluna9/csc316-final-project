@@ -7,11 +7,13 @@ class HKBridge:
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    def send_command(self, command, params=None):
-        message = {'command': command}
-        if params:
-            message['params'] = params
-        self.sock.sendto(json.dumps(message).encode(), (self.host, self.port))
+    def reset(self):
+        raise NotImplementedError
+    
+    def send_input(self, input_data):
+        message = json.dumps(input_data).encode('utf-8')
+        self.sock.sendto(message, (self.host, self.port))
+
 
     def close(self):
         self.sock.close()
