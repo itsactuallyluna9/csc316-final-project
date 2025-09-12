@@ -31,11 +31,10 @@ jobs:
       #     wget {dependencyLink} -O {dependencyName}.zip
       #     unzip -o {dependencyName}.zip -d References
 
-      - name: Setup MSBuild
-        run: sudo apt-get install -y nuget mono-devel mono-xbuild
-
-      - name: Restore packages
-        run: nuget restore HKMod.csproj
+      - name: Setup DotNet
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.305
 
       - name: Build project
         run: dotnet build --configuration Release
