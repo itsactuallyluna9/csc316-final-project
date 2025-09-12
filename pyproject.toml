@@ -11,6 +11,7 @@ dependencies = [
     "click>=8.2.1",
     "numpy>=2.3.3",
     "obsws-python>=1.8.0",
+    "opencv-python>=4.11.0.86",
     "rich>=14.1.0",
     "torch>=2.8.0",
 ]
