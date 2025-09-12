@@ -8,11 +8,11 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "click>=8.2.1",
     "numpy>=2.3.3",
+    "obsws-python>=1.8.0",
     "rich>=14.1.0",
-    "tensorflow[and-cuda]>=2.20.0",
     "torch>=2.8.0",
-    "torchvision>=0.23.0",
 ]
 
 [project.scripts]
