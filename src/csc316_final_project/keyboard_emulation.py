@@ -72,9 +72,6 @@ if __name__ == "__main__":
             "focus" : False
         })
         
-        print("\n=== Testing Neural Network Input Simulation ===")
-        # Simulate neural network outputsz
-        
         controller.release_all()
         
     except KeyboardInterrupt: #^C stops the keyboard
