@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2.3.3",
     "obsws-python>=1.8.0",
     "opencv-python>=4.11.0.86",
+    "pynput>=1.8.1",
     "rich>=14.1.0",
     "torch>=2.8.0",
 ]
