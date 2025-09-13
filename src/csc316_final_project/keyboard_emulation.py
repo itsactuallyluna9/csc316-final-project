@@ -9,11 +9,15 @@ class HollowKnightController:
         
         # Hollow Knight key mappings
         self.key_map = {
-            'jump': 'z',           # Jump
-            'attack': 'x',         # Attack
+            'jump': 'z',          # Jump
+            'attack': 'x',        # Attack
             'focus': 'a',         # Focus/Heal
             'left': Key.left,     # Move left
             'right': Key.right,   # Move right
+            'up' : Key.up,        # Look up (needed for attack up)
+            'down': Key.down,     # Look down (need for attack down)  
+            'load': "l",          # Quickslot (load), bind this in the debug mod binds menu
+            'save': "s"           # Quickslot (save), bind this in the debug mod binds menu  
         }
         
         self.running = True
@@ -40,7 +44,7 @@ class HollowKnightController:
         self.pressed_keys.clear()
         print("Released all keys")
     
-    def neural_network_output(self, nn_output: dict): #nn_output expects a dictionary of booleans
+    def output(self, nn_output: dict): #nn_output expects a dictionary of booleans
         # Press keys based on NN output
         for action, value in nn_output.items():
             if value: 
@@ -64,7 +68,7 @@ if __name__ == "__main__":
     
     try:
         print("\n=== Testing Basic Movement ===")
-        controller.neural_network_output({
+        controller.output({
             "jump" : True,
             "left" : True,
             "right": False,
