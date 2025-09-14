@@ -30,6 +30,22 @@ namespace SuperFancyInteropMod
             bridge = new Bridge("localhost", 9999);
             bridge.StartSending();
 
+            // Create a GameObject with BridgeBehaviour to collect state on Unity main thread
+            try
+            {
+                var go = new GameObject("SuperFancyInterop_Bridge");
+                UObject.DontDestroyOnLoad(go);
+                var behaviour = go.AddComponent<BridgeBehaviour>();
+                if (behaviour != null)
+                {
+                    behaviour.bridge = bridge;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Failed to create BridgeBehaviour: " + ex.Message);
+            }
+
             Log("Initialized");
         }
     }

@@ -19,25 +19,119 @@ namespace SuperFancyInteropMod
         private readonly int port;
         private readonly UdpClient udpClient;
         private readonly IPEndPoint clientEndPoint;
-        private Thread updateThread;
+    private Thread updateThread;
         private bool isRunning = true;
         private const int UPDATE_RATE_MS = 33; // ~30 FPS
+    public static readonly float UPDATE_RATE_S = UPDATE_RATE_MS / 1000f;
+    // Queue for messages created on main thread and sent on sender thread
+    private readonly Queue<byte[]> sendQueue = new Queue<byte[]>();
+    private readonly object queueLock = new object();
 
         public Bridge(string host, int port)
         {
             this.host = host;
             this.port = port;
-            this.udpClient = new UdpClient();
-            // Use Dns.GetHostAddresses to resolve hostnames like 'localhost'
+            // Always use IPv4
+            this.udpClient = new UdpClient(AddressFamily.InterNetwork);
             var addresses = Dns.GetHostAddresses(host);
-            if (addresses == null || addresses.Length == 0)
-                throw new ArgumentException($"Could not resolve host: {host}");
-            this.clientEndPoint = new IPEndPoint(addresses[0], port);
+            IPAddress ipv4 = null;
+            foreach (var addr in addresses)
+            {
+                if (addr.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    ipv4 = addr;
+                    break;
+                }
+            }
+            if (ipv4 == null)
+                throw new ArgumentException($"Could not resolve an IPv4 address for host: {host}");
+            this.clientEndPoint = new IPEndPoint(ipv4, port);
         }
 
         public void StartSending()
         {
-            updateThread = new Thread(SendStateUpdates);
+            updateThread = new Thread(() => {
+                // Active ping/pong handshake: send ping to Python and wait for a JSON pong reply
+                Modding.Logger.Log("Pinging Python bridge to check readiness...");
+                udpClient.Client.ReceiveTimeout = 1000; // 1 second timeout for receive
+                bool pythonReady = false;
+                var pingMessage = new Dictionary<string, object> { { "type", "ping" } };
+                var pingJson = JsonConvert.SerializeObject(pingMessage);
+                var pingBytes = System.Text.Encoding.UTF8.GetBytes(pingJson);
+
+                while (!pythonReady && isRunning)
+                {
+                    try
+                    {
+                        // send ping
+                        udpClient.Send(pingBytes, pingBytes.Length, clientEndPoint);
+
+                        // try to receive a reply
+                        IPEndPoint tempEndPoint = new IPEndPoint(IPAddress.Any, 0);
+                        var received = udpClient.Receive(ref tempEndPoint);
+                        if (received != null && received.Length > 0)
+                        {
+                            var msg = System.Text.Encoding.UTF8.GetString(received);
+                            try
+                            {
+                                var parsed = JsonConvert.DeserializeObject<Dictionary<string, object>>(msg);
+                                if (parsed != null && parsed.TryGetValue("type", out var t) && (t.ToString().ToLower() == "pong" || t.ToString().ToLower() == "ready"))
+                                {
+                                    pythonReady = true;
+                                    Modding.Logger.Log("Received pong from Python program. Starting state updates.");
+                                    break;
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                // ignore non-json replies
+                            }
+                        }
+                    }
+                    catch (SocketException) { /* timeout or no data, keep waiting */ }
+                    catch (Exception ex)
+                    {
+                        Modding.Logger.Log("Error during handshake ping: " + ex.Message);
+                    }
+
+                    Thread.Sleep(500);
+                }
+
+                if (pythonReady)
+                {
+                    // Enter sender loop: only read from sendQueue and transmit
+                    Modding.Logger.Log("Entering UDP sender loop");
+                    while (isRunning)
+                    {
+                        try
+                        {
+                            byte[] toSend = null;
+                            lock (queueLock)
+                            {
+                                if (sendQueue.Count > 0)
+                                    toSend = sendQueue.Dequeue();
+                            }
+                            if (toSend != null)
+                            {
+                                udpClient.Send(toSend, toSend.Length, clientEndPoint);
+                            }
+                            else
+                            {
+                                Thread.Sleep(UPDATE_RATE_MS);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Modding.Logger.Log("Error in UDP sender loop: " + ex.Message);
+                            Thread.Sleep(1000);
+                        }
+                    }
+                }
+                else
+                {
+                    Modding.Logger.Log("Stopped waiting for Python program (isRunning = false)");
+                }
+            });
             updateThread.IsBackground = true;
             updateThread.Start();
             Modding.Logger.Log($"Started sending state updates to {host}:{port} at {1000.0/UPDATE_RATE_MS:F1} FPS");
@@ -46,19 +140,21 @@ namespace SuperFancyInteropMod
         private void SendStateUpdates()
         {
             Modding.Logger.Log("Starting state update loop");
-            
             while (isRunning)
             {
                 try
                 {
-                    var gameState = GetCurrentState();
-                    var message = new Dictionary<string, object>
+                    // Only send updates if player is in a gameplay scene
+                    if (GameManager.instance != null && GameManager.instance.IsGameplayScene())
                     {
-                        { "type", "full_update" },
-                        { "state", gameState }
-                    };
-                    
-                    SendMessage(message);
+                        var gameState = GetCurrentState();
+                        var message = new Dictionary<string, object>
+                        {
+                            { "type", "full_update" },
+                            { "state", gameState }
+                        };
+                        SendMessage(message);
+                    }
                     Thread.Sleep(UPDATE_RATE_MS);
                 }
                 catch (Exception ex)
@@ -95,7 +191,7 @@ namespace SuperFancyInteropMod
             }
         }
 
-        private Dictionary<string, object> GetCurrentState()
+    public Dictionary<string, object> GetCurrentState()
         {
             try
             {
@@ -210,11 +306,10 @@ namespace SuperFancyInteropMod
             public static readonly HitboxType Other = new("Other", 8); // orange
             public static readonly HitboxType None = new("None", 9); // orange
 
-
             public readonly string Name;
             public readonly int Depth;
 
-            private HitboxType(string name, int depth)
+            public HitboxType(string name, int depth)
             {
                 Name = name;
                 Depth = depth;
@@ -223,95 +318,97 @@ namespace SuperFancyInteropMod
         
         public static HitboxType TryAddHitboxes(Collider2D collider2D)
         {
-             if (collider2D == null)   {  
+            if (collider2D == null)
+                return HitboxType.None;
+
+            // Only process supported collider types
+            if (!(collider2D is BoxCollider2D || collider2D is PolygonCollider2D || collider2D is EdgeCollider2D || collider2D is CircleCollider2D))
+                return HitboxType.None;
+
+            var go = collider2D.gameObject;
+            if (go == null)
+                return HitboxType.None;
+
+            // Enemy hitbox
+            if (collider2D.GetComponent<DamageHero>() != null || go.LocateMyFSM("damages_hero") != null)
+                return HitboxType.Enemy;
+
+            // Other (enemy health manager)
+            if (go.GetComponent<HealthManager>() != null || go.LocateMyFSM("health_manager_enemy") != null || go.LocateMyFSM("health_manager") != null)
+                return HitboxType.Other;
+
+            // Terrain and breakable
+            if (go.layer == (int)PhysLayers.TERRAIN)
+            {
+                if (go.name.Contains("Breakable") || go.name.Contains("Collapse") || go.GetComponent<Breakable>() != null)
+                    return HitboxType.Breakable;
+                else
+                    return HitboxType.Terrain;
+            }
+
+            // Player
+            if (HeroController.instance != null && go == HeroController.instance.gameObject && !collider2D.isTrigger)
+                return HitboxType.Knight;
+
+            // Attack
+            if (go.GetComponent<DamageEnemies>() != null || go.LocateMyFSM("damages_enemy") != null || (go.name == "Damager" && go.LocateMyFSM("Damage") != null))
+                return HitboxType.Attack;
+
+            // Hazard respawn
+            if (collider2D.isTrigger && collider2D.GetComponent<HazardRespawnTrigger>() != null)
+                return HitboxType.HazardRespawn;
+
+            // Gate
+            if (collider2D.isTrigger && collider2D.GetComponent<TransitionPoint>() != null)
+                return HitboxType.Gate;
+
+            // Trigger (breakable, not a bouncer)
+            if (collider2D.GetComponent<Breakable>() != null)
+            {
+                var bounce = collider2D.GetComponent<NonBouncer>();
+                if (bounce == null || !bounce.active)
+                    return HitboxType.Trigger;
                 return HitboxType.None;
             }
 
-            if (collider2D is BoxCollider2D or PolygonCollider2D or EdgeCollider2D or CircleCollider2D)
-            {
-                GameObject go = collider2D.gameObject;
-                if (collider2D.GetComponent<DamageHero>() || collider2D.gameObject.LocateMyFSM("damages_hero"))
-                {
-                    return HitboxType.Enemy;
-                }
-                else if (go.GetComponent<HealthManager>() || go.LocateMyFSM("health_manager_enemy") || go.LocateMyFSM("health_manager"))
-                {
-                    return HitboxType.Other;
-                }
-                else if (go.layer == (int)PhysLayers.TERRAIN)
-                {
-                    if (go.name.Contains("Breakable") || go.name.Contains("Collapse") || go.GetComponent<Breakable>() != null) return HitboxType.Breakable;
-                    else return HitboxType.Terrain;
-                }
-                else if (go == HeroController.instance?.gameObject && !collider2D.isTrigger)
-                {
-                    return HitboxType.Knight;
-                }
-                else if (go.GetComponent<DamageEnemies>() || go.LocateMyFSM("damages_enemy") || go.name == "Damager" && go.LocateMyFSM("Damage"))
-                {
-                    return HitboxType.Attack;
-                }
-                else if (collider2D.isTrigger && collider2D.GetComponent<HazardRespawnTrigger>())
-                {
-                    return HitboxType.HazardRespawn;
-                }
-                else if (collider2D.isTrigger && collider2D.GetComponent<TransitionPoint>())
-                {
-                    return HitboxType.Gate;
-                }
-                else if (collider2D.GetComponent<Breakable>())
-                {
-                    NonBouncer bounce = collider2D.GetComponent<NonBouncer>();
-                    if (bounce == null || !bounce.active)
-                    {
-                        return HitboxType.Trigger;
-                    }
-                    return HitboxType.None;
-                }
-                else
-                {
-                    return HitboxType.Other;
-                }
-            }
-            return HitboxType.None;
+            // Fallback
+            return HitboxType.Other;
         }
 
         private List<Dictionary<string, object>> GetSceneHitboxes()
         {
             var hitboxes = new List<Dictionary<string, object>>();
-            
             try
             {
                 var colliders = UObject.FindObjectsOfType<Collider2D>();
-                var count = 0;
-                const int maxHitboxes = 80; 
-                
+                int count = 0;
+                const int maxHitboxes = 80;
                 foreach (var collider in colliders)
                 {
                     if (count >= maxHitboxes) break;
-                    
-                    if (collider != null && collider.gameObject.activeInHierarchy)
+                    if (collider == null) continue;
+                    var go = collider.gameObject;
+                    if (go == null || !go.activeInHierarchy) continue;
+                    var hitboxType = TryAddHitboxes(collider);
+                    // Only include hitboxes with Depth < 8 (like Abstraction)
+                    if (hitboxType.Depth < 8)
                     {
-                        var hitboxType = TryAddHitboxes(collider);
-                        if (hitboxType.Name != "None")
+                        var bounds = collider.bounds;
+                        var hitboxData = new Dictionary<string, object>
                         {
-                            var hitboxData = new Dictionary<string, object>
-                            {
-                                { "name", collider.gameObject.name },
-                                { "type", hitboxType.Name },
-                                { "bounds", new Dictionary<string, object>
-                                    {
-                                        { "x", Math.Round(collider.bounds.center.x, 2) },
-                                        { "y", Math.Round(collider.bounds.center.y, 2) },
-                                        { "w", Math.Round(collider.bounds.size.x, 2) },
-                                        { "h", Math.Round(collider.bounds.size.y, 2) }
-                                    }
+                            { "name", go.name },
+                            { "type", hitboxType.Name },
+                            { "bounds", new Dictionary<string, object>
+                                {
+                                    { "x", Math.Round(bounds.center.x, 2) },
+                                    { "y", Math.Round(bounds.center.y, 2) },
+                                    { "w", Math.Round(bounds.size.x, 2) },
+                                    { "h", Math.Round(bounds.size.y, 2) }
                                 }
-                            };
-                            
-                            hitboxes.Add(hitboxData);
-                            count++;
-                        }
+                            }
+                        };
+                        hitboxes.Add(hitboxData);
+                        count++;
                     }
                 }
             }
@@ -319,7 +416,6 @@ namespace SuperFancyInteropMod
             {
                 Modding.Logger.Log("Error getting hitboxes: " + ex.Message);
             }
-            
             return hitboxes;
         }
 
@@ -378,5 +474,16 @@ namespace SuperFancyInteropMod
             updateThread?.Join(1000); // Wait up to 1 second for thread to finish
             Modding.Logger.Log("Bridge stopped");
         }
+
+        // Called from Unity main thread behaviour to enqueue serialized messages
+        public void EnqueueMessage(byte[] message)
+        {
+            lock (queueLock)
+            {
+                sendQueue.Enqueue(message);
+            }
+        }
+
+        public bool IsRunning => isRunning;
     }
 }

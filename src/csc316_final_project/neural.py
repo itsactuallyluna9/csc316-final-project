@@ -86,6 +86,7 @@ if __name__ == "__main__":
     while not bridge.connected:
         print("Waiting for connection to game...")
         sleep(1)
+    input("Press Enter to start training...")
     try:
         train(model, bridge, controller)
     finally:

@@ -58,10 +58,15 @@ class GameStateVisualizer:
         Returns:
             Tuple of (player_x, player_y) or (0, 0) if not found
         """
-        for hitbox in state_data.get('hitboxes', []):
+        for hitbox in state_data.get('hitboxes', []) or []:
+            if not isinstance(hitbox, dict):
+                continue
             if hitbox.get('type') == 'Knight':
-                bounds = hitbox['bounds']
-                return bounds['x'], bounds['y']
+                bounds = hitbox.get('bounds', {})
+                try:
+                    return float(bounds.get('x', 0.0)), float(bounds.get('y', 0.0))
+                except Exception:
+                    return 0.0, 0.0
         return 0.0, 0.0
     
     def center_camera_on_player(self, state_data: Dict[str, Any]):
@@ -106,8 +111,14 @@ class GameStateVisualizer:
         center_x, center_y = self.world_to_screen(x, y)
         
         # Calculate rectangle bounds
-        half_w = int(w * self.scale / 2)
-        half_h = int(h * self.scale / 2)
+        try:
+            half_w = int(float(w) * self.scale / 2)
+        except Exception:
+            half_w = int(1 * self.scale / 2)
+        try:
+            half_h = int(float(h) * self.scale / 2)
+        except Exception:
+            half_h = int(1 * self.scale / 2)
         
         top_left = (center_x - half_w, center_y - half_h)
         bottom_right = (center_x + half_w, center_y + half_h)
@@ -126,7 +137,10 @@ class GameStateVisualizer:
             thickness: Line thickness (-1 for filled)
         """
         center_x, center_y = self.world_to_screen(x, y)
-        pixel_radius = int(radius * self.scale)
+        try:
+            pixel_radius = max(1, int(float(radius) * self.scale))
+        except Exception:
+            pixel_radius = max(1, int(1 * self.scale))
         cv2.circle(self.canvas, (center_x, center_y), pixel_radius, color, thickness)
     
     def draw_text(self, text: str, x: int, y: int, color: Tuple[int, int, int] | None = None,
@@ -155,9 +169,11 @@ class GameStateVisualizer:
             health_data: Dictionary with 'current', 'max', and 'blue' health
             x, y: Screen position for health bar
         """
-        current = health_data.get('current', 0)
-        max_health = health_data.get('max', 5)
-        blue = health_data.get('blue', 0)
+        if not isinstance(health_data, dict):
+            health_data = {}
+        current = int(health_data.get('current', 0) or 0)
+        max_health = int(health_data.get('max', 5) or 5)
+        blue = int(health_data.get('blue', 0) or 0)
         
         # Draw health text
         health_text = f"Health: {current}/{max_health}"
@@ -195,9 +211,15 @@ class GameStateVisualizer:
         Args:
             hitbox: Dictionary containing hitbox data
         """
-        bounds = hitbox['bounds']
-        x, y = bounds['x'], bounds['y']
-        w, h = bounds['w'], bounds['h']
+        bounds = hitbox.get('bounds', {})
+        try:
+            x, y = float(bounds.get('x', 0.0)), float(bounds.get('y', 0.0))
+        except Exception:
+            x, y = 0.0, 0.0
+        try:
+            w, h = float(bounds.get('w', 1.0)), float(bounds.get('h', 1.0))
+        except Exception:
+            w, h = 1.0, 1.0
         hitbox_type = hitbox.get('type', 'Other')
         name = hitbox.get('name', 'Unknown')
         
@@ -222,10 +244,16 @@ class GameStateVisualizer:
         Args:
             enemy: Dictionary containing enemy data
         """
-        x, y = enemy['x'], enemy['y']
-        w, h = enemy['w'], enemy['h']
-        name = enemy['name']
-        hp = enemy['hp']
+        try:
+            x, y = float(enemy.get('x', 0.0)), float(enemy.get('y', 0.0))
+        except Exception:
+            x, y = 0.0, 0.0
+        try:
+            w, h = float(enemy.get('w', 1.0)), float(enemy.get('h', 1.0))
+        except Exception:
+            w, h = 1.0, 1.0
+        name = str(enemy.get('name', 'Enemy'))
+        hp = enemy.get('hp', 0)
         
         # Draw enemy rectangle
         self.draw_rectangle(x, y, w, h, self.colors['Enemy'], -1)
@@ -251,18 +279,24 @@ class GameStateVisualizer:
         self.clear_canvas()
         
         # Draw health bar
-        if 'player_health' in state_data:
-            self.draw_health_bar(state_data['player_health'])
+        if state_data and isinstance(state_data, dict) and 'player_health' in state_data:
+            self.draw_health_bar(state_data.get('player_health', {}))
         
         # Draw hitboxes
-        if 'hitboxes' in state_data:
-            for hitbox in state_data['hitboxes']:
-                self.draw_hitbox(hitbox)
+        if state_data and isinstance(state_data, dict) and 'hitboxes' in state_data:
+            for hitbox in state_data.get('hitboxes', []) or []:
+                try:
+                    self.draw_hitbox(hitbox)
+                except Exception:
+                    continue
         
         # Draw enemies
-        if 'enemies' in state_data:
-            for enemy in state_data['enemies']:
-                self.draw_enemy(enemy)
+        if state_data and isinstance(state_data, dict) and 'enemies' in state_data:
+            for enemy in state_data.get('enemies', []) or []:
+                try:
+                    self.draw_enemy(enemy)
+                except Exception:
+                    continue
         
         # Add coordinate grid (optional)
         self.draw_coordinate_grid()
@@ -424,22 +458,62 @@ def create_video_from_jsonl(file_path: str, output_path: str = "game_visualizati
 
 
 if __name__ == "__main__":
-    # Example usage
+    # Example usage: if a JSONL file is provided, visualize it; otherwise run live viewer
     import sys
-    
+    from time import sleep
+    try:
+        from csc316_final_project.bridge import HKBridge
+    except Exception:
+        # fallback to relative import
+        from .bridge import HKBridge
+
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
         frame_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-        
-        # Visualize a single frame
+        # Visualize a single frame from JSONL
         frame = load_and_visualize_jsonl(file_path, frame_index)
-        
         cv2.imshow(f'Game State - Frame {frame_index}', frame)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-        
-        # Save the frame
         cv2.imwrite(f'game_state_frame_{frame_index}.png', frame)
         print(f"Frame saved as game_state_frame_{frame_index}.png")
     else:
-        print("Usage: python visualizer.py <jsonl_file> [frame_index]")
+        # Live viewer using HKBridge
+        bridge = HKBridge(host='localhost', port=9999)
+        while not bridge.connected:
+            print("Waiting for connection to game...")
+            sleep(1)
+        print("Connected to game. Starting live view. Press 'q' to quit, 's' to save frame.")
+
+        vis = GameStateVisualizer(width=1200, height=800, scale=20.0)
+        frame_count = 0
+        try:
+            while True:
+                try:
+                    state = bridge.get_state() or {}
+                    print(f"Frame {frame_count}: Got state with {len(state.get('hitboxes', []) or [])} hitboxes, {len(state.get('enemies', []) or [])} enemies")
+                    frame = vis.visualize_state(state)
+                    cv2.putText(frame, f"Frame: {frame_count}", (10, vis.height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                    cv2.imshow("Hollow Knight Live View", frame)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        print("Quit key pressed")
+                        break
+                    elif key == ord('s'):
+                        filename = f"live_frame_{frame_count:04d}.png"
+                        cv2.imwrite(filename, frame)
+                        print(f"Saved {filename}")
+                    frame_count += 1
+                    sleep(0.033)
+                except KeyboardInterrupt:
+                    print("\nKeyboard interrupt received")
+                    break
+                except Exception as e:
+                    print(f"Error getting/displaying state: {e}")
+                    sleep(1)
+        finally:
+            try:
+                bridge.close()
+            except Exception:
+                pass
+            cv2.destroyAllWindows()

@@ -12,6 +12,8 @@ class HKBridge:
         self.listening = False
         self.__listening_thread = Thread(target=self.listen, daemon=True)
         self.__internal_state = {}
+        self._handshake_done = False
+        self._handshake_thread = None
         if auto_listen:
             self.listen_in_background()
 
@@ -24,28 +26,62 @@ class HKBridge:
         try:
             self.sock.bind((self.host, self.port))
             print(f"Listening for messages on {self.host}:{self.port}")
+            # Start a background thread to send a JSON handshake repeatedly until the mod responds
+            def _handshake_loop():
+                try:
+                    handshake_bytes = json.dumps({"type": "ready"}).encode("utf-8")
+                    while not self._handshake_done and self.listening:
+                        try:
+                            self.sock.sendto(handshake_bytes, (self.host, self.port))
+                            # quiet log
+                            # print(f"Sent JSON 'ready' handshake to {self.host}:{self.port}")
+                        except Exception:
+                            pass
+                        # resend every 0.5s until we receive something from the mod
+                        sleep(0.5)
+                except Exception:
+                    pass
+
+            from time import sleep
+            self._handshake_thread = Thread(target=_handshake_loop, daemon=True)
+            self._handshake_thread.start()
         except Exception as e:
             print(f"Failed to bind to {self.host}:{self.port}: {e}")
             return
-            
         while self.listening:
             try:
                 data, addr = self.sock.recvfrom(1024*1024)  # buffer size is 1MB
+                # ignore empty packets
+                if not data or data.strip() == b"":
+                    continue
                 try:
                     message = json.loads(data)
-                    message_type = message.get("type")
-                    
-                    if message_type == "full_update":
-                        self.__internal_state = message.get("state", {})
-                    elif message_type == "partial_update":
-                        updates = message.get("state", {})
-                        self.__internal_state.update(updates)
-                    else:
-                        print(f"Unknown message type: {message_type}")
-                        
-                except json.JSONDecodeError as e:
-                    print(f"Failed to decode JSON message: {e}")
+                except json.JSONDecodeError:
+                    # Only log non-empty, non-json packets if needed
+                    # print(f"Received non-JSON packet from {addr}: {data[:100]!r}")
                     continue
+
+                message_type = message.get("type")
+                # If mod is pinging us, reply with a pong immediately
+                if message_type == "ping":
+                    try:
+                        pong = json.dumps({"type": "pong"}).encode("utf-8")
+                        self.sock.sendto(pong, addr)
+                    except Exception:
+                        pass
+                    # don't treat ping as state; continue listening
+                    continue
+                if message_type == "full_update":
+                    self.__internal_state = message.get("state", {})
+                    self._handshake_done = True
+                elif message_type == "partial_update":
+                    updates = message.get("state", {})
+                    self.__internal_state.update(updates)
+                    self._handshake_done = True
+                else:
+                    # unknown but valid JSON
+                    # print(f"Unknown message type: {message_type}")
+                    pass
             except Exception as e:
                 if self.listening:  # Only log if we're still supposed to be listening
                     print(f"Error receiving data: {e}")
