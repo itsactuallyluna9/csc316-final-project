@@ -28,7 +28,7 @@ namespace SuperFancyInteropMod
             Instance = this;
 
             bridge = new Bridge("localhost", 9999);
-            bridge.StartListening();
+            bridge.StartSending();
 
             Log("Initialized");
         }

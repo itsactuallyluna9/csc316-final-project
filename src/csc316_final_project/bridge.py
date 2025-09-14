@@ -1,54 +1,55 @@
 import socket
 import json
-from dataclasses import dataclass
+from threading import Thread
 from .visualizer import GameStateVisualizer
 import cv2
 
-@dataclass
-class HKInput:
-    left: bool = False
-    right: bool = False
-    jump: bool = False
-    attack: bool = False
-
-    def to_dict(self):
-        return {
-            'left': self.left,
-            'right': self.right,
-            'jump': self.jump,
-            'attack': self.attack
-        }
-
 class HKBridge:
-    def __init__(self, host='localhost', port=9999):
+    def __init__(self, host='localhost', port=9999, auto_listen=True):
         self.host = host
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.connect((self.host, self.port))
+        self.listening = False
+        self.__listening_thread = Thread(target=self.listen, daemon=True)
+        self.__internal_state = {}
+        if auto_listen:
+            self.listen_in_background()
 
-    def reset(self):
-        """
-        Reset the game state via the mod.
-        
-        Will block until the reset is complete.
-        """
-        message = json.dumps({'type': "reset"}).encode('utf-8')
-        self.sock.send(message)
-        # wait for confirmation
-        while True:
-            data, _ = self.sock.recvfrom(4096)
-            response = json.loads(data.decode('utf-8'))
-            if response.get('type') == 'reset_done':
+    def listen_in_background(self):
+        if not self.listening:
+            self.__listening_thread.start()
+
+    def listen(self):
+        self.listening = True
+        try:
+            self.sock.bind((self.host, self.port))
+            print(f"Listening for messages on {self.host}:{self.port}")
+        except Exception as e:
+            print(f"Failed to bind to {self.host}:{self.port}: {e}")
+            return
+            
+        while self.listening:
+            try:
+                data, addr = self.sock.recvfrom(1024*1024)  # buffer size is 1MB
+                try:
+                    message = json.loads(data)
+                    message_type = message.get("type")
+                    
+                    if message_type == "full_update":
+                        self.__internal_state = message.get("state", {})
+                    elif message_type == "partial_update":
+                        updates = message.get("state", {})
+                        self.__internal_state.update(updates)
+                    else:
+                        print(f"Unknown message type: {message_type}")
+                        
+                except json.JSONDecodeError as e:
+                    print(f"Failed to decode JSON message: {e}")
+                    continue
+            except Exception as e:
+                if self.listening:  # Only log if we're still supposed to be listening
+                    print(f"Error receiving data: {e}")
                 break
-        raise NotImplementedError
-    
-    def send_input(self, inputs: HKInput):
-        # preprocess:
-        if inputs.left and inputs.right:
-            inputs.left = False
-            inputs.right = False
-        message = json.dumps(inputs.to_dict()).encode('utf-8')
-        self.sock.send(message)
 
     def get_state(self) -> dict:
         """
@@ -56,19 +57,22 @@ class HKBridge:
         
         Returns the game state dictionary.
         """
-        message = json.dumps({'type': "get_state"}).encode('utf-8')
-        self.sock.send(message)
-        # wait for confirmation
-        while True:
-            data, _ = self.sock.recvfrom(1024*1024)
-            response = json.loads(data.decode('utf-8'))
-            if response.get('type') == 'state':
-                return response
-                break
-        # raise NotImplementedError
+        return self.__internal_state
+    
+    @property
+    def connected(self) -> bool:
+        """
+        Returns True if the bridge has received any state from the game (i.e., is connected).
+        """
+        return bool(self.__internal_state)
 
     def close(self):
-        self.sock.close()
+        self.listening = False
+        if self.sock:
+            self.sock.close()
+        # Wait for listening thread to finish (it's daemon so it will stop anyway)
+        if self.__listening_thread.is_alive():
+            self.__listening_thread.join(timeout=1.0)
 
 if __name__ == "__main__":
     from time import sleep

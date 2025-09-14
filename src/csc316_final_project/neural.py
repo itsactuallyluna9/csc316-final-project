@@ -1,3 +1,4 @@
+from time import sleep
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -5,9 +6,10 @@ import numpy as np
 from datetime import datetime, timedelta
 
 from csc316_final_project.bridge import HKBridge
+from csc316_final_project.keyboard_emulation import HollowKnightController
 
 class HollowNN(nn.Module):
-    def __init__(self, input_shape, num_actions):
+    def __init__(self, input_shape, num_actions=7):
         super().__init__()
         c, h, w = input_shape
         self.net = nn.Sequential(
@@ -22,12 +24,14 @@ class HollowNN(nn.Module):
     def forward(self, x):
         return self.net(x) # how's that for a one-liner?
 
-def train(model: HollowNN, bridge: HKBridge, episodes=1000, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5)):
+def train(model: HollowNN, bridge: HKBridge, controller: HollowKnightController, episodes=1000, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5)):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
 
     for episode in range(episodes):
-        bridge.reset()
+        controller.press_key('load')
+        # Wait a moment to load
+        sleep(1)
         state = bridge.get_state()
         done = False
         total_reward = 0
@@ -36,9 +40,19 @@ def train(model: HollowNN, bridge: HKBridge, episodes=1000, gamma=0.99, lr=1e-4,
         while not done:
             state_tensor = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
             q_values = model(state_tensor)
-            action = torch.argmax(q_values).item()
+            actions = q_values.detach() # left, right, up, down, jump, attack, focus
 
-            bridge.send_input({'action': action})
+            controller.output(
+                {
+                    'left': actions[0][0] > 0,
+                    'right': actions[0][1] > 0,
+                    'up': actions[0][2] > 0,
+                    'down': actions[0][3] > 0,
+                    'jump': actions[0][4] > 0,
+                    'attack': actions[0][5] > 0,
+                    'focus': actions[0][6] > 0
+                }
+            )
             next_state, reward, done = bridge.get_state()
             if datetime.now() - start_time > max_episode_time:
                 done = True  # End episode if it exceeds max time
@@ -64,11 +78,15 @@ def train(model: HollowNN, bridge: HKBridge, episodes=1000, gamma=0.99, lr=1e-4,
         print(f"Episode {episode+1}/{episodes}, Total Reward: {total_reward}")
 
 if __name__ == "__main__":
-    input_shape = (3, 84, 84)  # Example input shape (C, H, W)
-    num_actions = 4      # Example number of actions
+    input_shape = (3, 84, 84)
+    num_actions = 7
     model = HollowNN(input_shape, num_actions)
     bridge = HKBridge(host='localhost', port=9999)
+    controller = HollowKnightController()
+    while not bridge.connected:
+        print("Waiting for connection to game...")
+        sleep(1)
     try:
-        train(model, bridge)
+        train(model, bridge, controller)
     finally:
         bridge.close()

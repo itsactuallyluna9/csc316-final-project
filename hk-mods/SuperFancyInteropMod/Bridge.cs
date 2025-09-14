@@ -18,197 +18,80 @@ namespace SuperFancyInteropMod
         private readonly string host;
         private readonly int port;
         private readonly UdpClient udpClient;
-        private Thread listeningThread;
-        private bool isListening = true;
-        private IPEndPoint clientEndPoint;
+        private readonly IPEndPoint clientEndPoint;
+        private Thread updateThread;
+        private bool isRunning = true;
+        private const int UPDATE_RATE_MS = 33; // ~30 FPS
 
         public Bridge(string host, int port)
         {
             this.host = host;
             this.port = port;
-            this.udpClient = new UdpClient(port);
+            this.udpClient = new UdpClient();
+            // Use Dns.GetHostAddresses to resolve hostnames like 'localhost'
+            var addresses = Dns.GetHostAddresses(host);
+            if (addresses == null || addresses.Length == 0)
+                throw new ArgumentException($"Could not resolve host: {host}");
+            this.clientEndPoint = new IPEndPoint(addresses[0], port);
         }
 
-        public void StartListening()
+        public void StartSending()
         {
-            listeningThread = new Thread(Listen);
-            listeningThread.IsBackground = true;
-            listeningThread.Start();
-            Modding.Logger.Log("Started listening thread on port " + port);
+            updateThread = new Thread(SendStateUpdates);
+            updateThread.IsBackground = true;
+            updateThread.Start();
+            Modding.Logger.Log($"Started sending state updates to {host}:{port} at {1000.0/UPDATE_RATE_MS:F1} FPS");
         }
 
-        private void Listen()
+        private void SendStateUpdates()
         {
-            Modding.Logger.Log("UDP Server listening on port " + port);
+            Modding.Logger.Log("Starting state update loop");
             
-            while (isListening)
+            while (isRunning)
             {
                 try
                 {
-                    IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
-                    byte[] receivedBytes = udpClient.Receive(ref remoteEndPoint);
-                    
-                    // Store the client endpoint for sending responses
-                    clientEndPoint = remoteEndPoint;
-                    
-                    var message = System.Text.Encoding.UTF8.GetString(receivedBytes);
-                    var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(message);
-                    Modding.Logger.Log("Got a message: " + message);
-                    HandleMessage(data);
-                }
-                catch (SocketException ex)
-                {
-                    if (isListening) // Only log if we're still supposed to be listening
+                    var gameState = GetCurrentState();
+                    var message = new Dictionary<string, object>
                     {
-                        Modding.Logger.Log("Socket error: " + ex.Message);
-                    }
+                        { "type", "full_update" },
+                        { "state", gameState }
+                    };
+                    
+                    SendMessage(message);
+                    Thread.Sleep(UPDATE_RATE_MS);
                 }
                 catch (Exception ex)
                 {
-                    Modding.Logger.Log("Error in Listen: " + ex.Message);
-                }
-            }
-        }
-
-        private void HandleMessage(Dictionary<string, object> message)
-        {
-            try
-            {
-                if (message.ContainsKey("type"))
-                {
-                    switch (message["type"].ToString())
+                    if (isRunning) // Only log if we're still supposed to be running
                     {
-                        case "reset":
-                            // Handle reset
-                            Modding.Logger.Log("Handling reset request");
-                            // TODO: Implement actual reset logic here
-                            
-                            var response = new Dictionary<string, object>
-                            {
-                                { "type", "reset_done" }
-                            };
-                            SendResponse(response);
-                            break;
-                            
-                        case "get_state":
-                            // Handle get state request
-                            Modding.Logger.Log("Handling get_state request");
-                            var stateResponse = GetCurrentState();
-                            SendResponse(stateResponse);
-                            break;
-                            
-                        default:
-                            Modding.Logger.Log("Unknown message type: " + message["type"]);
-                            break;
+                        Modding.Logger.Log("Error in SendStateUpdates: " + ex.Message);
+                        Thread.Sleep(1000); // Wait longer on error
                     }
                 }
-                else
-                {
-                    // This is an input message (no "type" field means it's input data)
-                    HandleInput(message);
-                }
-            }
-            catch (Exception ex)
-            {
-                Modding.Logger.Log("Error handling message: " + ex.Message);
             }
         }
 
-        private void HandleInput(Dictionary<string, object> message)
+        private void SendMessage(Dictionary<string, object> message)
         {
             try
             {
-                Modding.Logger.Log("Handling input");
+                var messageJson = JsonConvert.SerializeObject(message);
+                var messageBytes = System.Text.Encoding.UTF8.GetBytes(messageJson);
                 
-                // Get the HeroController - you might need to adjust this based on your game's structure
-                HeroController heroController = HeroController.instance;
-                if (heroController == null)
+                // Check if message is too large for UDP (typical limit is around 64KB)
+                const int maxUdpSize = 32768; // 32KB to be safe
+                if (messageBytes.Length > maxUdpSize)
                 {
-                    Modding.Logger.Log("HeroController not found!");
+                    Modding.Logger.Log($"Message too large ({messageBytes.Length} bytes), skipping");
                     return;
                 }
-
-                // Parse input values safely
-                bool left = message.ContainsKey("left") && Convert.ToBoolean(message["left"]);
-                bool right = message.ContainsKey("right") && Convert.ToBoolean(message["right"]);
-                bool jump = message.ContainsKey("jump") && Convert.ToBoolean(message["jump"]);
-                bool attack = message.ContainsKey("attack") && Convert.ToBoolean(message["attack"]);
-
-                // Apply movement input
-                if (left && !right)
-                {
-                    heroController.move_input = -127f; // Left is typically negative
-                }
-                else if (right && !left)
-                {
-                    heroController.move_input = 127f; // Right is typically positive
-                }
-                else
-                {
-                    heroController.move_input = 0f; // No movement or both pressed
-                }
-
-                // Apply jump input
-                if (jump)
-                {
-                    heroController.vertical_input = 127f;
-                }
-                else
-                {
-                    heroController.vertical_input = 0f;
-                }
-
-                // Apply attack input
-                if (attack)
-                {
-                    // You might need to adjust this based on how attacks work in your game
-                    if (heroController.cState != null)
-                    {
-                        heroController.cState.attacking = true;
-                    }
-                }
-
-                Modding.Logger.Log($"Input processed - Left: {left}, Right: {right}, Jump: {jump}, Attack: {attack}");
+                
+                udpClient.Send(messageBytes, messageBytes.Length, clientEndPoint);
             }
             catch (Exception ex)
             {
-                Modding.Logger.Log("Error handling input: " + ex.Message);
-            }
-        }
-
-        private void SendResponse(Dictionary<string, object> response)
-        {
-            try
-            {
-                if (clientEndPoint != null)
-                {
-                    var responseMessage = JsonConvert.SerializeObject(response);
-                    var responseBytes = System.Text.Encoding.UTF8.GetBytes(responseMessage);
-                    
-                    // Check if message is too large for UDP (typical limit is around 64KB, but let's be safe)
-                    const int maxUdpSize = 32768; // 32KB
-                    if (responseBytes.Length > maxUdpSize)
-                    {
-                        Modding.Logger.Log($"Message too long ({responseBytes.Length} bytes), sending error response");
-                        var errorResponse = new Dictionary<string, object>
-                        {
-                            { "type", "error" },
-                            { "message", "Response too large for UDP transmission" },
-                            { "size", responseBytes.Length }
-                        };
-                        var errorMessage = JsonConvert.SerializeObject(errorResponse);
-                        var errorBytes = System.Text.Encoding.UTF8.GetBytes(errorMessage);
-                        udpClient.Send(errorBytes, errorBytes.Length, clientEndPoint);
-                        return;
-                    }
-                    
-                    udpClient.Send(responseBytes, responseBytes.Length, clientEndPoint);
-                    Modding.Logger.Log($"Sent response ({responseBytes.Length} bytes)");
-                }
-            }
-            catch (Exception ex)
-            {
-                Modding.Logger.Log("Error sending response: " + ex.Message);
+                Modding.Logger.Log("Error sending message: " + ex.Message);
             }
         }
 
@@ -216,14 +99,15 @@ namespace SuperFancyInteropMod
         {
             try
             {
-                var state = new Dictionary<string, object>
-                {
-                    { "type", "state" }
-                };
+                var state = new Dictionary<string, object>();
 
                 // Get player health
                 var playerHealth = GetPlayerHealth();
                 state["player_health"] = playerHealth;
+
+                // Get player position
+                var playerPosition = GetPlayerPosition();
+                state["player_position"] = playerPosition;
 
                 // Get hitboxes from current scene
                 var hitboxes = GetSceneHitboxes();
@@ -233,8 +117,6 @@ namespace SuperFancyInteropMod
                 var enemies = GetEnemiesOnScreen();
                 state["enemies"] = enemies;
 
-                Modding.Logger.Log($"State collected - Player Health: {playerHealth}, Hitboxes: {hitboxes.Count}, Enemies: {enemies.Count}");
-
                 return state;
             }
             catch (Exception ex)
@@ -242,7 +124,6 @@ namespace SuperFancyInteropMod
                 Modding.Logger.Log("Error getting current state: " + ex.Message);
                 return new Dictionary<string, object>
                 {
-                    { "type", "state" },
                     { "error", ex.Message }
                 };
             }
@@ -279,6 +160,38 @@ namespace SuperFancyInteropMod
                     { "current", 0 },
                     { "max", 0 },
                     { "blue", 0 }
+                };
+            }
+        }
+
+        private Dictionary<string, object> GetPlayerPosition()
+        {
+            try
+            {
+                var position = new Dictionary<string, object>();
+                
+                var heroController = HeroController.instance;
+                if (heroController != null)
+                {
+                    var pos = heroController.transform.position;
+                    position["x"] = Math.Round(pos.x, 2);
+                    position["y"] = Math.Round(pos.y, 2);
+                }
+                else
+                {
+                    position["x"] = 0.0;
+                    position["y"] = 0.0;
+                }
+
+                return position;
+            }
+            catch (Exception ex)
+            {
+                Modding.Logger.Log("Error getting player position: " + ex.Message);
+                return new Dictionary<string, object>
+                {
+                    { "x", 0.0 },
+                    { "y", 0.0 }
                 };
             }
         }
@@ -460,9 +373,9 @@ namespace SuperFancyInteropMod
 
         public void Stop()
         {
-            isListening = false;
+            isRunning = false;
             udpClient?.Close();
-            listeningThread?.Join(1000); // Wait up to 1 second for thread to finish
+            updateThread?.Join(1000); // Wait up to 1 second for thread to finish
             Modding.Logger.Log("Bridge stopped");
         }
     }

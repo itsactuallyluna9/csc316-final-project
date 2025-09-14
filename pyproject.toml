@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-csc316-final-project = "csc316_final_project:main"
+csc316-final-project = "csc316_final_project:cli"
 
 [build-system]
 requires = ["uv_build>=0.8.13,<0.9.0"]
