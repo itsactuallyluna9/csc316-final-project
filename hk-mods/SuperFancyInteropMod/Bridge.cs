@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using System.Reflection;
 using Modding;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 using UObject = UnityEngine.Object;
 using GlobalEnums;
 using System.Collections;
@@ -319,60 +320,75 @@ namespace SuperFancyInteropMod
         public static HitboxType TryAddHitboxes(Collider2D collider2D)
         {
             if (collider2D == null)
+            {
                 return HitboxType.None;
-
-            // Only process supported collider types
-            if (!(collider2D is BoxCollider2D || collider2D is PolygonCollider2D || collider2D is EdgeCollider2D || collider2D is CircleCollider2D))
-                return HitboxType.None;
+            }
 
             var go = collider2D.gameObject;
-            if (go == null)
-                return HitboxType.None;
 
-            // Enemy hitbox
-            if (collider2D.GetComponent<DamageHero>() != null || go.LocateMyFSM("damages_hero") != null)
-                return HitboxType.Enemy;
-
-            // Other (enemy health manager)
-            if (go.GetComponent<HealthManager>() != null || go.LocateMyFSM("health_manager_enemy") != null || go.LocateMyFSM("health_manager") != null)
-                return HitboxType.Other;
-
-            // Terrain and breakable
-            if (go.layer == (int)PhysLayers.TERRAIN)
+            // Quick checks that apply to many collider types
+            try
             {
-                if (go.name.Contains("Breakable") || go.name.Contains("Collapse") || go.GetComponent<Breakable>() != null)
+                if (collider2D.GetComponent<DamageHero>() != null || go.LocateMyFSM("damages_hero") != null)
+                {
+                    return HitboxType.Enemy;
+                }
+
+                if (go.GetComponent<HealthManager>() != null || go.LocateMyFSM("health_manager_enemy") != null || go.LocateMyFSM("health_manager") != null)
+                {
+                    return HitboxType.Other;
+                }
+
+                if (go == HeroController.instance?.gameObject && !collider2D.isTrigger)
+                {
+                    return HitboxType.Knight;
+                }
+
+                if (go.GetComponent<DamageEnemies>() != null || go.LocateMyFSM("damages_enemy") != null || (go.name == "Damager" && go.LocateMyFSM("Damage") != null))
+                {
+                    return HitboxType.Attack;
+                }
+
+                if (collider2D.isTrigger && collider2D.GetComponent<HazardRespawnTrigger>() != null)
+                {
+                    return HitboxType.HazardRespawn;
+                }
+
+                if (collider2D.isTrigger && collider2D.GetComponent<TransitionPoint>() != null)
+                {
+                    return HitboxType.Gate;
+                }
+
+                if (go.GetComponent<Breakable>() != null)
+                {
+                    var bounce = collider2D.GetComponent<NonBouncer>();
+                    if (bounce == null || !bounce.active)
+                        return HitboxType.Trigger;
+                    return HitboxType.None;
+                }
+            }
+            catch (Exception)
+            {
+                // Defensive: if any of the component queries throw, ignore and continue to other checks
+            }
+
+            // Terrain recognition: either by layer or by common terrain collider types
+            bool isTerrainLayer = (go != null && go.layer == (int)PhysLayers.TERRAIN);
+            if (isTerrainLayer || collider2D is TilemapCollider2D || collider2D is CompositeCollider2D || collider2D is CapsuleCollider2D)
+            {
+                if (go != null && (go.name.Contains("Breakable") || go.name.Contains("Collapse") || go.GetComponent<Breakable>() != null))
                     return HitboxType.Breakable;
                 else
                     return HitboxType.Terrain;
             }
 
-            // Player
-            if (HeroController.instance != null && go == HeroController.instance.gameObject && !collider2D.isTrigger)
-                return HitboxType.Knight;
-
-            // Attack
-            if (go.GetComponent<DamageEnemies>() != null || go.LocateMyFSM("damages_enemy") != null || (go.name == "Damager" && go.LocateMyFSM("Damage") != null))
-                return HitboxType.Attack;
-
-            // Hazard respawn
-            if (collider2D.isTrigger && collider2D.GetComponent<HazardRespawnTrigger>() != null)
-                return HitboxType.HazardRespawn;
-
-            // Gate
-            if (collider2D.isTrigger && collider2D.GetComponent<TransitionPoint>() != null)
-                return HitboxType.Gate;
-
-            // Trigger (breakable, not a bouncer)
-            if (collider2D.GetComponent<Breakable>() != null)
+            // For common physics colliders, fall back to Other
+            if (collider2D is BoxCollider2D || collider2D is PolygonCollider2D || collider2D is EdgeCollider2D || collider2D is CircleCollider2D)
             {
-                var bounce = collider2D.GetComponent<NonBouncer>();
-                if (bounce == null || !bounce.active)
-                    return HitboxType.Trigger;
-                return HitboxType.None;
+                return HitboxType.Other;
             }
 
-            // Fallback
-            return HitboxType.Other;
+            return HitboxType.None;
         }
 
         private List<Dictionary<string, object>> GetSceneHitboxes()
@@ -383,12 +399,22 @@ namespace SuperFancyInteropMod
                 var colliders = UObject.FindObjectsOfType<Collider2D>();
                 int count = 0;
                 const int maxHitboxes = 80;
+                int skippedLogged = 0;
+                const int maxSkippedLogs = 20;
                 foreach (var collider in colliders)
                 {
                     if (count >= maxHitboxes) break;
                     if (collider == null) continue;
                     var go = collider.gameObject;
-                    if (go == null || !go.activeInHierarchy) continue;
+                    if (go == null || !go.activeInHierarchy)
+                    {
+                        if (skippedLogged < maxSkippedLogs)
+                        {
+                            Modding.Logger.Log($"Skipped collider (inactive or null): name={(go?.name ?? "<null>")}, layer={(go?.layer.ToString() ?? "<null>")}, colliderType={collider.GetType().Name}, isTrigger={collider.isTrigger}, active={(go?.activeInHierarchy.ToString() ?? "false")}");
+                            skippedLogged++;
+                        }
+                        continue;
+                    }
                     var hitboxType = TryAddHitboxes(collider);
                     // Only include hitboxes with Depth < 8 (like Abstraction)
                     if (hitboxType.Depth < 8)
@@ -407,8 +433,20 @@ namespace SuperFancyInteropMod
                                 }
                             }
                         };
+                        if (hitboxType.Name == "Terrain" || hitboxType.Name == "Breakable")
+                        {
+                            Modding.Logger.Log($"Adding terrain hitbox: name={go.name}, colliderType={collider.GetType().Name}, bounds=({bounds.center.x:F2},{bounds.center.y:F2},{bounds.size.x:F2},{bounds.size.y:F2})");
+                        }
                         hitboxes.Add(hitboxData);
                         count++;
+                    }
+                    else
+                    {
+                        if (skippedLogged < maxSkippedLogs)
+                        {
+                            Modding.Logger.Log($"Ignored collider by TryAddHitboxes: name={go.name}, layer={go.layer}, type={collider.GetType().Name}, returnedDepth={hitboxType.Depth}");
+                            skippedLogged++;
+                        }
                     }
                 }
             }

@@ -1,0 +1,869 @@
+Listening for UDP packets on 0.0.0.0:9999 (timeout 10s)...
+Received 7878 bytes from ('127.0.0.1', 56103)
+{
+  "type": "full_update",
+  "state": {
+    "player_health": {
+      "current": 5,
+      "max": 5,
+      "blue": 0
+    },
+    "player_position": {
+      "x": 35.46,
+      "y": 11.41
+    },
+    "hitboxes": [
+      {
+        "name": "Bounds Cage",
+        "type": "Terrain",
+        "bounds": {
+          "x": 150.09,
+          "y": -170.3,
+          "w": 1520.17,
+          "h": 78.17
+        }
+      },
+      {
+        "name": "Bounds Cage",
+        "type": "Terrain",
+        "bounds": {
+          "x": 0.0,
+          "y": 198.0,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "Bounds Cage",
+        "type": "Terrain",
+        "bounds": {
+          "x": 0.0,
+          "y": 198.0,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "Bounds Cage",
+        "type": "Terrain",
+        "bounds": {
+          "x": 0.0,
+          "y": 198.0,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "UpSlash",
+        "type": "Attack",
+        "bounds": {
+          "x": 35.46,
+          "y": 12.1,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "Slash",
+        "type": "Attack",
+        "bounds": {
+          "x": 35.47,
+          "y": 11.0,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "AltSlash",
+        "type": "Attack",
+        "bounds": {
+          "x": 35.38,
+          "y": 10.97,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "WallSlash",
+        "type": "Attack",
+        "bounds": {
+          "x": 35.42,
+          "y": 11.0,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "DownSlash",
+        "type": "Attack",
+        "bounds": {
+          "x": 35.3,
+          "y": 9.82,
+          "w": 0.0,
+          "h": 0.0
+        }
+      },
+      {
+        "name": "Knight",
+        "type": "Knight",
+        "bounds": {
+          "x": 35.46,
+          "y": 10.66,
+          "w": 0.5,
+          "h": 1.28
+        }
+      },
+      {
+        "name": "Stalactite Hazard 5",
+        "type": "Enemy",
+        "bounds": {
+          "x": 60.88,
+          "y": 50.68,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Stalactite Hazard 1",
+        "type": "Enemy",
+        "bounds": {
+          "x": 144.84,
+          "y": 49.28,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Stalactite Hazard 2",
+        "type": "Enemy",
+        "bounds": {
+          "x": 148.12,
+          "y": 49.46,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Roof Collider (7)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 67.48,
+          "y": 41.74,
+          "w": 30.63,
+          "h": 26.04
+        }
+      },
+      {
+        "name": "Roof Collider (15)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 140.29,
+          "y": 73.76,
+          "w": 119.13,
+          "h": 16.53
+        }
+      },
+      {
+        "name": "Roof Collider (17)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 100.96,
+          "y": 45.54,
+          "w": 48.76,
+          "h": 23.7
+        }
+      },
+      {
+        "name": "Roof Collider (10)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 182.17,
+          "y": 43.6,
+          "w": 51.73,
+          "h": 33.25
+        }
+      },
+      {
+        "name": "Stalactite Hazard",
+        "type": "Enemy",
+        "bounds": {
+          "x": 140.12,
+          "y": 49.38,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Roof Collider (5)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 11.46,
+          "y": 66.44,
+          "w": 11.4,
+          "h": 10.54
+        }
+      },
+      {
+        "name": "Roof Collider (1)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 59.83,
+          "y": 49.84,
+          "w": 38.7,
+          "h": 71.37
+        }
+      },
+      {
+        "name": "Roof Collider (3)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 3.2,
+          "y": 40.61,
+          "w": 3.43,
+          "h": 6.01
+        }
+      },
+      {
+        "name": "Roof Collider",
+        "type": "Terrain",
+        "bounds": {
+          "x": 18.89,
+          "y": 49.49,
+          "w": 18.94,
+          "h": 71.76
+        }
+      },
+      {
+        "name": "Roof Collider (13)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 108.19,
+          "y": 57.14,
+          "w": 16.32,
+          "h": 6.48
+        }
+      },
+      {
+        "name": "Break Floor 1",
+        "type": "Terrain",
+        "bounds": {
+          "x": 144.02,
+          "y": 58.42,
+          "w": 3.84,
+          "h": 5.53
+        }
+      },
+      {
+        "name": "Roof Collider (2)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 4.2,
+          "y": 15.42,
+          "w": 5.2,
+          "h": 6.43
+        }
+      },
+      {
+        "name": "Roof Collider (14)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 143.67,
+          "y": 54.4,
+          "w": 26.55,
+          "h": 10.73
+        }
+      },
+      {
+        "name": "Roof Collider (6)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 16.3,
+          "y": 77.12,
+          "w": 6.42,
+          "h": 6.44
+        }
+      },
+      {
+        "name": "Stalactite Hazard 4",
+        "type": "Enemy",
+        "bounds": {
+          "x": 152.83,
+          "y": 49.96,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Stalactite Hazard (1)",
+        "type": "Enemy",
+        "bounds": {
+          "x": 86.43,
+          "y": 51.7,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Roof Collider (16)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 155.52,
+          "y": 57.51,
+          "w": 16.57,
+          "h": 7.34
+        }
+      },
+      {
+        "name": "Roof Collider (12)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 158.97,
+          "y": 23.72,
+          "w": 65.62,
+          "h": 31.64
+        }
+      },
+      {
+        "name": "Stalactite Hazard",
+        "type": "Enemy",
+        "bounds": {
+          "x": 124.39,
+          "y": 36.93,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Roof Collider (11)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 169.85,
+          "y": 7.32,
+          "w": 7.4,
+          "h": 6.78
+        }
+      },
+      {
+        "name": "Stalactite Hazard 3",
+        "type": "Enemy",
+        "bounds": {
+          "x": 150.11,
+          "y": 49.57,
+          "w": 0.61,
+          "h": 1.88
+        }
+      },
+      {
+        "name": "Roof Collider (4)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 3.16,
+          "y": 61.13,
+          "w": 3.68,
+          "h": 3.39
+        }
+      },
+      {
+        "name": "Roof Collider (9)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 105.95,
+          "y": 18.58,
+          "w": 55.16,
+          "h": 9.62
+        }
+      },
+      {
+        "name": "Roof Collider (8)",
+        "type": "Terrain",
+        "bounds": {
+          "x": 59.62,
+          "y": 34.12,
+          "w": 8.42,
+          "h": 20.78
+        }
+      },
+      {
+        "name": "plat_float_08",
+        "type": "Terrain",
+        "bounds": {
+          "x": 152.61,
+          "y": 7.64,
+          "w": 1.94,
+          "h": 1.9
+        }
+      },
+      {
+        "name": "plat_float_07",
+        "type": "Terrain",
+        "bounds": {
+          "x": 141.05,
+          "y": 10.34,
+          "w": 3.85,
+          "h": 0.89
+        }
+      },
+      {
+        "name": "Cave Spikes (3)",
+        "type": "Enemy",
+        "bounds": {
+          "x": 10.63,
+          "y": 52.16,
+          "w": 5.11,
+          "h": 1.14
+        }
+      },
+      {
+        "name": "Crossroads Statue Horned 4",
+        "type": "Trigger",
+        "bounds": {
+          "x": 146.78,
+          "y": 4.99,
+          "w": 2.29,
+          "h": 2.59
+        }
+      },
+      {
+        "name": "Crawler 2",
+        "type": "Enemy",
+        "bounds": {
+          "x": 81.35,
+          "y": 59.47,
+          "w": 1.42,
+          "h": 0.91
+        }
+      },
+      {
+        "name": "right1",
+        "type": "Gate",
+        "bounds": {
+          "x": 193.5,
+          "y": 68.0,
+          "w": 1.0,
+          "h": 12.0
+        }
+      },
+      {
+        "name": "Tute Pole 14",
+        "type": "Trigger",
+        "bounds": {
+          "x": 127.74,
+          "y": 27.32,
+          "w": 0.41,
+          "h": 2.71
+        }
+      },
+      {
+        "name": "Collapser Tute 01",
+        "type": "Breakable",
+        "bounds": {
+          "x": 123.9,
+          "y": 60.76,
+          "w": 10.54,
+          "h": 2.66
+        }
+      },
+      {
+        "name": "Collapser Tute 01",
+        "type": "Breakable",
+        "bounds": {
+          "x": 122.46,
+          "y": 64.62,
+          "w": 1.08,
+          "h": 6.5
+        }
+      },
+      {
+        "name": "Cave Spikes (1)",
+        "type": "Enemy",
+        "bounds": {
+          "x": 184.43,
+          "y": 34.2,
+          "w": 6.72,
+          "h": 1.0
+        }
+      },
+      {
+        "name": "Cave Spikes (1)",
+        "type": "Enemy",
+        "bounds": {
+          "x": 173.5,
+          "y": 34.17,
+          "w": 10.97,
+          "h": 1.05
+        }
+      },
+      {
+        "name": "Tute Pole 17",
+        "type": "Trigger",
+        "bounds": {
+          "x": 114.96,
+          "y": 63.23,
+          "w": 0.41,
+          "h": 2.71
+        }
+      },
+      {
+        "name": "Tute Pole 6",
+        "type": "Trigger",
+        "bounds": {
+          "x": 98.53,
+          "y": 31.38,
+          "w": 0.7,
+          "h": 2.74
+        }
+      },
+      {
+        "name": "Crossroads Statue Horn S",
+        "type": "Trigger",
+        "bounds": {
+          "x": 154.03,
+          "y": 62.58,
+          "w": 1.64,
+          "h": 2.1
+        }
+      },
+      {
+        "name": "Tute Pole 19",
+        "type": "Trigger",
+        "bounds": {
+          "x": 161.15,
+          "y": 63.34,
+          "w": 0.41,
+          "h": 2.71
+        }
+      },
+      {
+        "name": "Solid",
+        "type": "Terrain",
+        "bounds": {
+          "x": 123.9,
+          "y": 61.68,
+          "w": 15.44,
+          "h": 0.63
+        }
+      },
+      {
+        "name": "Solid",
+        "type": "Terrain",
+        "bounds": {
+          "x": 123.9,
+          "y": 58.84,
+          "w": 15.44,
+          "h": 0.63
+        }
+      },
+      {
+        "name": "plat_float_19",
+        "type": "Terrain",
+        "bounds": {
+          "x": 138.67,
+          "y": 19.08,
+          "w": 1.84,
+          "h": 2.55
+        }
+      },
+      {
+        "name": "Tute Pole 5",
+        "type": "Trigger",
+        "bounds": {
+          "x": 131.23,
+          "y": 23.31,
+          "w": 0.55,
+          "h": 2.73
+        }
+      },
+      {
+        "name": "plat_float_05",
+        "type": "Terrain",
+        "bounds": {
+          "x": 135.83,
+          "y": 39.1,
+          "w": 2.66,
+          "h": 0.67
+        }
+      },
+      {
+        "name": "Crossroads Statue Horned",
+        "type": "Trigger",
+        "bounds": {
+          "x": 107.8,
+          "y": 62.79,
+          "w": 2.02,
+          "h": 2.32
+        }
+      },
+      {
+        "name": "plat_float_20",
+        "type": "Terrain",
+        "bounds": {
+          "x": 86.49,
+          "y": 41.88,
+          "w": 3.85,
+          "h": 0.89
+        }
+      },
+      {
+        "name": "Tute Pole 24",
+        "type": "Trigger",
+        "bounds": {
+          "x": 105.52,
+          "y": 62.92,
+          "w": 0.51,
+          "h": 2.73
+        }
+      },
+      {
+        "name": "Health Cocoon",
+        "type": "Terrain",
+        "bounds": {
+          "x": 57.25,
+          "y": 63.75,
+          "w": 2.44,
+          "h": 3.4
+        }
+      },
+      {
+        "name": "top1",
+        "type": "Gate",
+        "bounds": {
+          "x": 34.5,
+          "y": 93.5,
+          "w": 7.0,
+          "h": 1.0
+        }
+      },
+      {
+        "name": "Buzzer 2",
+        "type": "Enemy",
+        "bounds": {
+          "x": 60.82,
+          "y": 39.39,
+          "w": 1.25,
+          "h": 0.62
+        }
+      },
+      {
+        "name": "Cave Spikes",
+        "type": "Enemy",
+        "bounds": {
+          "x": 146.27,
+          "y": 35.31,
+          "w": 14.62,
+          "h": 1.05
+        }
+      },
+      {
+        "name": "Tute Pole 16",
+        "type": "Trigger",
+        "bounds": {
+          "x": 84.6,
+          "y": 60.41,
+          "w": 0.48,
+          "h": 2.71
+        }
+      },
+      {
+        "name": "plat_float_14",
+        "type": "Terrain",
+        "bounds": {
+          "x": 152.84,
+          "y": 39.47,
+          "w": 1.5,
+          "h": 0.65
+        }
+      },
+      {
+        "name": "Crawler 3",
+        "type": "Enemy",
+        "bounds": {
+          "x": 146.41,
+          "y": 4.47,
+          "w": 1.42,
+          "h": 0.91
+        }
+      },
+      {
+        "name": "Hazard Respawn Trigger v2 (1)",
+        "type": "HazardRespawn",
+        "bounds": {
+          "x": 5.01,
+          "y": 68.64,
+          "w": 7.43,
+          "h": 9.31
+        }
+      },
+      {
+        "name": "Cave Spikes (6)",
+        "type": "Enemy",
+        "bounds": {
+          "x": 59.77,
+          "y": 23.09,
+          "w": 7.55,
+          "h": 1.05
+        }
+      },
+      {
+        "name": "Tute Pole 27",
+        "type": "Trigger",
+        "bounds": {
+          "x": 133.63,
+          "y": 11.39,
+          "w": 0.41,
+          "h": 2.71
+        }
+      },
+      {
+        "name": "plat_float_05",
+        "type": "Terrain",
+        "bounds": {
+          "x": 145.32,
+          "y": 21.13,
+          "w": 2.66,
+          "h": 0.67
+        }
+      },
+      {
+        "name": "Tute Pole 21",
+        "type": "Trigger",
+        "bounds": {
+          "x": 180.47,
+          "y": 63.31,
+          "w": 0.41,
+          "h": 2.71
+        }
+      },
+      {
+        "name": "plat_float_01",
+        "type": "Terrain",
+        "bounds": {
+          "x": 144.78,
+          "y": 39.03,
+          "w": 2.39,
+          "h": 0.69
+        }
+      },
+      {
+        "name": "Hazard Respawn Trigger v2",
+        "type": "HazardRespawn",
+        "bounds": {
+          "x": 7.1,
+          "y": 24.54,
+          "w": 7.43,
+          "h": 9.31
+        }
+      },
+      {
+        "name": "Chest",
+        "type": "Terrain",
+        "bounds": {
+          "x": 179.34,
+          "y": 16.42,
+          "w": 2.45,
+          "h": 1.96
+        }
+      },
+      {
+        "name": "Door",
+        "type": "Terrain",
+        "bounds": {
+          "x": 190.15,
+          "y": 68.91,
+          "w": 0.97,
+          "h": 14.36
+        }
+      },
+      {
+        "name": "Cave Spikes (1)",
+        "type": "Enemy",
+        "bounds": {
+          "x": 3.23,
+          "y": 46.31,
+          "w": 3.44,
+          "h": 1.05
+        }
+      },
+      {
+        "name": "plat_float_07",
+        "type": "Terrain",
+        "bounds": {
+          "x": 89.54,
+          "y": 35.56,
+          "w": 1.84,
+          "h": 2.55
+        }
+      },
+      {
+        "name": "Tute Pole 29",
+        "type": "Trigger",
+        "bounds": {
+          "x": 41.91,
+          "y": 11.04,
+          "w": 0.63,
+          "h": 2.74
+        }
+      },
+      {
+        "name": "plat_float_09",
+        "type": "Terrain",
+        "bounds": {
+          "x": 147.06,
+          "y": 12.05,
+          "w": 1.85,
+          "h": 1.83
+        }
+      }
+    ],
+    "enemies": [
+      {
+        "name": "Crawler 1",
+        "x": 124.77,
+        "y": 11.08,
+        "hp": 8,
+        "w": 1.42,
+        "h": 0.91
+      },
+      {
+        "name": "Crawler 2",
+        "x": 81.3,
+        "y": 60.08,
+        "hp": 8,
+        "w": 1.42,
+        "h": 0.91
+      },
+      {
+        "name": "Crawler 3",
+        "x": 146.35,
+        "y": 5.08,
+        "hp": 8,
+        "w": 1.42,
+        "h": 0.91
+      },
+      {
+        "name": "Buzzer 2",
+        "x": 60.82,
+        "y": 39.58,
+        "hp": 8,
+        "w": 1.25,
+        "h": 0.62
+      },
+      {
+        "name": "Buzzer 1",
+        "x": 82.73,
+        "y": 49.41,
+        "hp": 8,
+        "w": 1.25,
+        "h": 0.62
+      },
+      {
+        "name": "Buzzer",
+        "x": 87.33,
+        "y": 33.38,
+        "hp": 8,
+        "w": 1.25,
+        "h": 0.62
+      }
+    ]
+  }
+}
+Got full_update packet; exiting.

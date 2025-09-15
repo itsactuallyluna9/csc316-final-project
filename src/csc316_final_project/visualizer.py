@@ -1,519 +1,477 @@
+#!/usr/bin/env python3
 """
-Visualizer module for drawing game state data using OpenCV.
+Hollow Knight Abstraction-style Visualizer
+
+This script creates a real-time visualization similar to the Abstraction mod,
+showing colored hitboxes for different game entities like the player, enemies,
+terrain, attacks, etc.
 """
-import json
+
 import cv2
 import numpy as np
-from typing import Dict, List, Tuple, Any
+from PIL import Image, ImageDraw, ImageFont
+import json
+import socket
+import threading
+import time
+import sys
+from typing import Dict, List, Tuple, Optional, Any
+from dataclasses import dataclass
+
+
+@dataclass
+class HitboxType:
+    """Represents a hitbox type with its associated color and depth."""
+    color: Tuple[int, int, int]
+    depth: int
+    name: str
+
+    @classmethod
+    def from_string(cls, type_str: str) -> 'HitboxType':
+        """Convert string type to HitboxType object."""
+        return HITBOX_TYPES.get(type_str, HITBOX_TYPES['Other'])
+
+
+# Color definitions matching the Abstraction mod
+HITBOX_TYPES = {
+    'Knight': HitboxType((255, 255, 0), 0, 'Knight'),          # yellow
+    'Enemy': HitboxType((255, 0, 0), 1, 'Enemy'),              # bright red  
+    'Attack': HitboxType((0, 255, 255), 2, 'Attack'),          # cyan  
+    'Terrain': HitboxType((0, 255, 0), 3, 'Terrain'),          # bright green
+    'Trigger': HitboxType((127, 127, 255), 4, 'Trigger'),      # blue
+    'Breakable': HitboxType((255, 191, 204), 5, 'Breakable'),  # pink
+    'Gate': HitboxType((0, 100, 255), 6, 'Gate'),              # blue
+    'HazardRespawn': HitboxType((255, 0, 255), 7, 'HazardRespawn'),  # magenta
+    'Other': HitboxType((255, 165, 0), 8, 'Other'),            # orange
+}
+
+
+# Remove unused dataclasses since we work directly with dict data
+# @dataclass 
+# class Hitbox:
+# @dataclass
+# class GameState:
 
 
 class GameStateVisualizer:
-    """Visualizes Hollow Knight game state data using OpenCV."""
+    """Visualizer that works with the HKBridge for real-time game state rendering."""
     
     def __init__(self, width: int = 1200, height: int = 800, scale: float = 10.0):
-        """
-        Initialize the visualizer.
+        """Initialize the visualizer.
         
         Args:
-            width: Canvas width in pixels
-            height: Canvas height in pixels  
-            scale: Scaling factor for game coordinates to pixels
+            width: Window width in pixels
+            height: Window height in pixels 
+            scale: Pixels per game unit (for coordinate conversion)
         """
         self.width = width
         self.height = height
         self.scale = scale
-        self.canvas = np.zeros((height, width, 3), dtype=np.uint8)
-        
-        # Camera position (world coordinates to center the view on)
         self.camera_x = 0.0
         self.camera_y = 0.0
         
-        # Color definitions (BGR format for OpenCV)
-        self.colors = {
-            'Knight': (0, 255, 0),          # Green
-            'Enemy': (0, 0, 255),           # Red
-            'Attack': (0, 255, 255),   # Yellow
-            'Terrain': (0, 255, 0),     # Green
-            'Trigger': (255, 255, 0), # Cyan
-            'Breakable': (255, 0, 255), # Magenta
-            'Gate': (255, 0, 0), # Blue
-            'HazardRespawn': (128, 0, 128), # Purple
-            'Other': (128, 128, 128),  # Gray
-            'background': (20, 20, 20),     # Dark gray
-            'text': (255, 255, 255)         # White
-        }
+        # Try to load a font, fallback to default if not available
+        try:
+            self.font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+            self.small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+        except:
+            self.font = ImageFont.load_default()
+            self.small_font = ImageFont.load_default()
     
-    def clear_canvas(self):
-        """Clear the canvas to background color."""
-        self.canvas.fill(0)
-        self.canvas[:] = self.colors['background']
-    
-    def find_player_position(self, state_data: Dict[str, Any]) -> Tuple[float, float]:
-        """
-        Find the player's position in the game state.
-        
-        Args:
-            state_data: Dictionary containing game state data
-            
-        Returns:
-            Tuple of (player_x, player_y) or (0, 0) if not found
-        """
-        for hitbox in state_data.get('hitboxes', []) or []:
-            if not isinstance(hitbox, dict):
-                continue
-            if hitbox.get('type') == 'Knight':
-                bounds = hitbox.get('bounds', {})
-                try:
-                    return float(bounds.get('x', 0.0)), float(bounds.get('y', 0.0))
-                except Exception:
-                    return 0.0, 0.0
-        return 0.0, 0.0
-    
-    def center_camera_on_player(self, state_data: Dict[str, Any]):
-        """
-        Center the camera on the player position.
-        
-        Args:
-            state_data: Dictionary containing game state data
-        """
-        player_x, player_y = self.find_player_position(state_data)
-        self.camera_x = player_x
-        self.camera_y = player_y
-    
-    def world_to_screen(self, x: float, y: float) -> Tuple[int, int]:
-        """
-        Convert world coordinates to screen coordinates.
-        
-        Args:
-            x: World X coordinate
-            y: World Y coordinate
-            
-        Returns:
-            Tuple of (screen_x, screen_y)
-        """
-        # Apply camera offset and scale, then flip Y axis (game Y increases upward)
-        screen_x = int((x - self.camera_x) * self.scale + self.width // 2)
-        screen_y = int(self.height // 2 - (y - self.camera_y) * self.scale)
+    def world_to_screen(self, world_x: float, world_y: float) -> Tuple[int, int]:
+        """Convert world coordinates to screen coordinates."""
+        # Center the camera on the player and flip Y axis (OpenCV Y increases downward)
+        screen_x = int((world_x - self.camera_x) * self.scale + self.width // 2)
+        screen_y = int(self.height // 2 - (world_y - self.camera_y) * self.scale)
         return screen_x, screen_y
     
-    def draw_rectangle(self, x: float, y: float, w: float, h: float, 
-                      color: Tuple[int, int, int], thickness: int = 2):
-        """
-        Draw a rectangle at world coordinates.
-        
-        Args:
-            x, y: Center position in world coordinates
-            w, h: Width and height in world units
-            color: BGR color tuple
-            thickness: Line thickness (-1 for filled)
-        """
-        # Convert to screen coordinates
-        center_x, center_y = self.world_to_screen(x, y)
-        
-        # Calculate rectangle bounds
-        try:
-            half_w = int(float(w) * self.scale / 2)
-        except Exception:
-            half_w = int(1 * self.scale / 2)
-        try:
-            half_h = int(float(h) * self.scale / 2)
-        except Exception:
-            half_h = int(1 * self.scale / 2)
-        
-        top_left = (center_x - half_w, center_y - half_h)
-        bottom_right = (center_x + half_w, center_y + half_h)
-        
-        cv2.rectangle(self.canvas, top_left, bottom_right, color, thickness)
-    
-    def draw_circle(self, x: float, y: float, radius: float, 
-                   color: Tuple[int, int, int], thickness: int = 2):
-        """
-        Draw a circle at world coordinates.
-        
-        Args:
-            x, y: Center position in world coordinates
-            radius: Radius in world units
-            color: BGR color tuple
-            thickness: Line thickness (-1 for filled)
-        """
-        center_x, center_y = self.world_to_screen(x, y)
-        try:
-            pixel_radius = max(1, int(float(radius) * self.scale))
-        except Exception:
-            pixel_radius = max(1, int(1 * self.scale))
-        cv2.circle(self.canvas, (center_x, center_y), pixel_radius, color, thickness)
-    
-    def draw_text(self, text: str, x: int, y: int, color: Tuple[int, int, int] | None = None,
-                 font_scale: float = 0.6, thickness: int = 1):
-        """
-        Draw text at screen coordinates.
-        
-        Args:
-            text: Text to draw
-            x, y: Screen coordinates
-            color: BGR color tuple
-            font_scale: Font scale factor
-            thickness: Text thickness
-        """
-        if color is None:
-            color = self.colors['text']
-        
-        cv2.putText(self.canvas, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 
-                   font_scale, color, thickness, cv2.LINE_AA)
-    
-    def draw_health_bar(self, health_data: Dict[str, int], x: int = 10, y: int = 30):
-        """
-        Draw player health bar in top-left corner.
-        
-        Args:
-            health_data: Dictionary with 'current', 'max', and 'blue' health
-            x, y: Screen position for health bar
-        """
-        if not isinstance(health_data, dict):
-            health_data = {}
-        current = int(health_data.get('current', 0) or 0)
-        max_health = int(health_data.get('max', 5) or 5)
-        blue = int(health_data.get('blue', 0) or 0)
-        
-        # Draw health text
-        health_text = f"Health: {current}/{max_health}"
-        if blue > 0:
-            health_text += f" (+{blue} blue)"
-        
-        self.draw_text(health_text, x, y)
-        
-        # Draw health boxes
-        box_size = 20
-        spacing = 25
-        start_y = y + 10
-        
-        for i in range(max_health):
-            box_x = x + i * spacing
-            box_color = self.colors['background']
-            
-            if i < current:
-                box_color = (0, 255, 0)  # Green for current health
-            elif i < current + blue:
-                box_color = (255, 128, 0)  # Blue health
-            else:
-                box_color = (64, 64, 64)  # Dark gray for missing health
-            
-            cv2.rectangle(self.canvas, (box_x, start_y), 
-                         (box_x + box_size, start_y + box_size), box_color, -1)
-            cv2.rectangle(self.canvas, (box_x, start_y), 
-                         (box_x + box_size, start_y + box_size), 
-                         self.colors['text'], 1)
-    
-    def draw_hitbox(self, hitbox: Dict[str, Any]):
-        """
-        Draw a single hitbox.
-        
-        Args:
-            hitbox: Dictionary containing hitbox data
-        """
+    def draw_hitbox(self, img, hitbox):
+        """Draw a single hitbox on the image"""
         bounds = hitbox.get('bounds', {})
-        try:
-            x, y = float(bounds.get('x', 0.0)), float(bounds.get('y', 0.0))
-        except Exception:
-            x, y = 0.0, 0.0
-        try:
-            w, h = float(bounds.get('w', 1.0)), float(bounds.get('h', 1.0))
-        except Exception:
-            w, h = 1.0, 1.0
-        hitbox_type = hitbox.get('type', 'Other')
-        name = hitbox.get('name', 'Unknown')
+        hitbox_type = hitbox.get('type', 'Unknown')
         
-        color = self.colors.get(hitbox_type, self.colors['Other'])
-        thickness = 1
-        if hitbox_type == 'Knight':
-            thickness = 3
+        # Extract bounds
+        x = bounds.get('x', 0)
+        y = bounds.get('y', 0)
+        w = bounds.get('w', 0)
+        h = bounds.get('h', 0)
+        
+        # Skip invalid or oversized hitboxes
+        if w <= 0 or h <= 0 or w > 500 or h > 500:
+            return
+        
+        # Convert world coordinates to screen coordinates
+        screen_x1, screen_y1 = self.world_to_screen(x, y)
+        screen_x2, screen_y2 = self.world_to_screen(x + w, y + h)
+        
+        # Skip if completely outside screen
+        if (screen_x2 < 0 or screen_x1 >= self.width or 
+            screen_y2 < 0 or screen_y1 >= self.height):
+            return
+        
+        # Clamp to screen bounds
+        screen_x1 = max(0, min(self.width - 1, int(screen_x1)))
+        screen_y1 = max(0, min(self.height - 1, int(screen_y1)))
+        screen_x2 = max(0, min(self.width - 1, int(screen_x2)))
+        screen_y2 = max(0, min(self.height - 1, int(screen_y2)))
+        
+        # Choose color based on type
+        if hitbox_type == 'Terrain':
+            color = (0, 255, 0)  # Green
+        elif hitbox_type == 'Enemy':
+            color = (0, 0, 255)  # Red
+        elif hitbox_type == 'Knight':
+            color = (255, 255, 0)  # Yellow
         elif hitbox_type == 'Attack':
-            thickness = 2
-
-        self.draw_rectangle(x, y, w, h, color, thickness)
+            color = (255, 0, 255)  # Magenta
+        elif hitbox_type == 'Trigger':
+            color = (0, 255, 255)  # Cyan
+        else:
+            color = (128, 128, 128)  # Gray
         
-        if hitbox_type in ['Knight', 'Attack', 'Enemy']:
-            screen_x, screen_y = self.world_to_screen(x, y + h/2 + 1)
-            label = f"{name} ({hitbox_type})"
-            self.draw_text(label, screen_x - 30, screen_y, color, 0.4)
+        # Draw rectangle
+        cv2.rectangle(img, (screen_x1, screen_y1), (screen_x2, screen_y2), color, 1)
     
-    def draw_enemy(self, enemy: Dict[str, Any]):
-        """
-        Draw a single enemy.
+    def visualize_state(self, state: dict) -> np.ndarray:
+        """Create a frame with all the visualizations from game state dict."""
+        # Create black background
+        img = np.zeros((self.height, self.width, 3), dtype=np.uint8)
         
-        Args:
-            enemy: Dictionary containing enemy data
-        """
-        try:
-            x, y = float(enemy.get('x', 0.0)), float(enemy.get('y', 0.0))
-        except Exception:
-            x, y = 0.0, 0.0
-        try:
-            w, h = float(enemy.get('w', 1.0)), float(enemy.get('h', 1.0))
-        except Exception:
-            w, h = 1.0, 1.0
-        name = str(enemy.get('name', 'Enemy'))
-        hp = enemy.get('hp', 0)
-        
-        # Draw enemy rectangle
-        self.draw_rectangle(x, y, w, h, self.colors['Enemy'], -1)
-        
-        # Draw enemy name and health
-        screen_x, screen_y = self.world_to_screen(x, y + h/2 + 1.5)
-        enemy_text = f"{name} (HP: {hp})"
-        self.draw_text(enemy_text, screen_x - 40, screen_y, self.colors['Enemy'], 0.5)
-    
-    def visualize_state(self, state_data: Dict[str, Any]) -> np.ndarray:
-        """
-        Visualize a complete game state.
-        
-        Args:
-            state_data: Dictionary containing game state data
+        # Update camera - instead of following player exactly, show a wider area
+        player_pos = state.get('player_position', {})
+        if player_pos:
+            # Center camera between player and nearby hitboxes for better view
+            player_x = player_pos.get('x', self.camera_x)
+            player_y = player_pos.get('y', self.camera_y)
             
-        Returns:
-            numpy array representing the visualization
-        """
-        # Center camera on player
-        self.center_camera_on_player(state_data)
+            # Find the center of all reasonable hitboxes to show more context
+            hitboxes = state.get('hitboxes', [])
+            if hitboxes:
+                valid_positions = []
+                for hitbox in hitboxes:
+                    bounds = hitbox.get('bounds', {})
+                    x, y = bounds.get('x', 0), bounds.get('y', 0)
+                    w, h = bounds.get('w', 0), bounds.get('h', 0)
+                    
+                    # Skip massive bounds and empty terrain
+                    if w > 500 or h > 500:
+                        continue
+                    if w == 0 and h == 0 and hitbox.get('type') == 'Terrain':
+                        continue
+                    
+                    # Only include hitboxes within reasonable distance of player
+                    distance = ((x - player_x)**2 + (y - player_y)**2)**0.5
+                    if distance < 150:  # Within 150 units
+                        valid_positions.append((x, y))
+                
+                if valid_positions:
+                    # Calculate center of nearby hitboxes and player
+                    all_x = [pos[0] for pos in valid_positions] + [player_x]
+                    all_y = [pos[1] for pos in valid_positions] + [player_y]
+                    
+                    center_x = sum(all_x) / len(all_x)
+                    center_y = sum(all_y) / len(all_y)
+                    
+                    # Smoothly move camera towards this center
+                    self.camera_x = self.camera_x * 0.9 + center_x * 0.1
+                    self.camera_y = self.camera_y * 0.9 + center_y * 0.1
+                else:
+                    # Fallback to player position
+                    self.camera_x = player_x
+                    self.camera_y = player_y
+            else:
+                self.camera_x = player_x
+                self.camera_y = player_y
         
-        self.clear_canvas()
-        
-        # Draw health bar
-        if state_data and isinstance(state_data, dict) and 'player_health' in state_data:
-            self.draw_health_bar(state_data.get('player_health', {}))
-        
-        # Draw hitboxes
-        if state_data and isinstance(state_data, dict) and 'hitboxes' in state_data:
-            for hitbox in state_data.get('hitboxes', []) or []:
-                try:
-                    self.draw_hitbox(hitbox)
-                except Exception:
+        # Draw hitboxes if we have them
+        hitboxes = state.get('hitboxes', [])
+        if hitboxes:
+            # Sort hitboxes by depth (lower depth drawn first/behind)
+            def get_depth(hitbox):
+                hitbox_type = hitbox.get('type', 'Other')
+                return HITBOX_TYPES.get(hitbox_type, HITBOX_TYPES['Other']).depth
+            
+            sorted_hitboxes = sorted(hitboxes, key=get_depth)
+            
+            drawn_count = 0
+            for hitbox in sorted_hitboxes:
+                # Skip obviously bad hitboxes (like the massive bounds cage)
+                bounds = hitbox.get('bounds', {})
+                w, h = bounds.get('w', 0), bounds.get('h', 0)
+                
+                # Skip if too large (bounds cage type stuff)
+                if w > 500 or h > 500:
                     continue
-        
-        # Draw enemies
-        if state_data and isinstance(state_data, dict) and 'enemies' in state_data:
-            for enemy in state_data.get('enemies', []) or []:
-                try:
-                    self.draw_enemy(enemy)
-                except Exception:
+                    
+                # Skip if zero size and it's terrain (these are just empty bounds)
+                if w == 0 and h == 0 and hitbox.get('type') == 'Terrain':
                     continue
+                
+                self.draw_hitbox(img, hitbox)
+                drawn_count += 1
         
-        # Add coordinate grid (optional)
-        self.draw_coordinate_grid()
+        # Draw player crosshair
+        player_pos = state.get('player_position', {})
+        if player_pos:
+            px, py = self.world_to_screen(player_pos.get('x', 0), player_pos.get('y', 0))
+            if 0 <= px < self.width and 0 <= py < self.height:
+                # Draw crosshair for player position
+                cv2.line(img, (px-10, py), (px+10, py), (255, 255, 255), 2)
+                cv2.line(img, (px, py-10), (px, py+10), (255, 255, 255), 2)
+                cv2.circle(img, (px, py), 3, (255, 255, 0), -1)  # Yellow center dot
         
-        # Add legend
-        self.draw_legend()
+        # Convert to PIL for text drawing
+        pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        draw = ImageDraw.Draw(pil_img)
         
-        # Add camera info
-        self.draw_camera_info()
+        # Draw UI elements
+        self.draw_ui_pil(draw, state)
+        self.draw_legend_pil(draw)
         
-        return self.canvas.copy()
+        # Draw instructions if no data
+        if not state:
+            self.draw_no_data_message(draw)
+        
+        # Convert back to OpenCV format
+        return cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
     
-    def draw_coordinate_grid(self, spacing: int = 50):
-        """Draw a coordinate grid for reference."""
-        # Vertical lines
-        for i in range(0, self.width, spacing):
-            cv2.line(self.canvas, (i, 0), (i, self.height), (40, 40, 40), 1)
+    def draw_ui_pil(self, draw: Any, state: dict):
+        """Draw UI elements using PIL."""
+        if not state:
+            return
+            
+        # Health display
+        health = state.get('player_health', {})
+        if health:
+            health_text = f"Health: {health.get('current', '?')}/{health.get('max', '?')}"
+            if health.get('blue', 0) > 0:
+                health_text += f" (+{health['blue']} blue)"
+            draw.text((10, 10), health_text, fill=(255, 255, 255), font=self.font)
         
-        # Horizontal lines  
-        for i in range(0, self.height, spacing):
-            cv2.line(self.canvas, (0, i), (self.width, i), (40, 40, 40), 1)
+        # Position display
+        pos = state.get('player_position', {})
+        if pos:
+            pos_text = f"Position: ({pos.get('x', 0):.2f}, {pos.get('y', 0):.2f})"
+            draw.text((10, 35), pos_text, fill=(255, 255, 255), font=self.font)
         
-        # Center lines
-        cv2.line(self.canvas, (self.width//2, 0), (self.width//2, self.height), 
-                (60, 60, 60), 2)
-        cv2.line(self.canvas, (0, self.height//2), (self.width, self.height//2), 
-                (60, 60, 60), 2)
+        # Camera info
+        camera_text = f"Camera: ({self.camera_x:.2f}, {self.camera_y:.2f})"
+        draw.text((10, 60), camera_text, fill=(255, 255, 255), font=self.font)
+        
+        # Scale info
+        scale_text = f"Scale: {self.scale:.1f}x"
+        draw.text((10, 85), scale_text, fill=(255, 255, 255), font=self.font)
+        
+        # Hitbox count by type
+        hitboxes = state.get('hitboxes', [])
+        y_offset = 110
+        if hitboxes:
+            type_counts = {}
+            visible_counts = {}
+            
+            for hitbox in hitboxes:
+                hitbox_type = hitbox.get('type', 'Other')
+                type_counts[hitbox_type] = type_counts.get(hitbox_type, 0) + 1
+                
+                # Check if hitbox is potentially visible
+                bounds = hitbox.get('bounds', {})
+                x, y = bounds.get('x', 0), bounds.get('y', 0)
+                w, h = bounds.get('w', 0), bounds.get('h', 0)
+                
+                # Simple visibility check (within reasonable distance from camera)
+                distance_from_camera = ((x - self.camera_x)**2 + (y - self.camera_y)**2)**0.5
+                if distance_from_camera < 100:  # Within 100 units of camera
+                    visible_counts[hitbox_type] = visible_counts.get(hitbox_type, 0) + 1
+            
+            for hitbox_type, count in sorted(type_counts.items()):
+                color = HITBOX_TYPES.get(hitbox_type, HITBOX_TYPES['Other']).color
+                visible_count = visible_counts.get(hitbox_type, 0)
+                count_text = f"{hitbox_type}: {count} ({visible_count} near)"
+                draw.text((10, y_offset), count_text, fill=color, font=self.small_font)
+                y_offset += 20
+        
+        # Enemy count
+        enemies = state.get('enemies', [])
+        if enemies:
+            enemy_text = f"Enemies: {len(enemies)}"
+            draw.text((10, y_offset), enemy_text, fill=(255, 100, 100), font=self.small_font)
+            y_offset += 20
+        
+        # Debug info for total hitboxes
+        total_hitboxes = len(hitboxes)
+        # Calculate how many would be drawn (exclude massive bounds and empty terrain)
+        drawable_count = 0
+        for hitbox in hitboxes:
+            bounds = hitbox.get('bounds', {})
+            w, h = bounds.get('w', 0), bounds.get('h', 0)
+            if w > 500 or h > 500:
+                continue
+            if w == 0 and h == 0 and hitbox.get('type') == 'Terrain':
+                continue
+            drawable_count += 1
+            
+        debug_text = f"Hitboxes: {total_hitboxes} total, {drawable_count} drawable"
+        draw.text((10, y_offset), debug_text, fill=(200, 200, 200), font=self.small_font)
     
-    def draw_legend(self):
-        """Draw a legend explaining the colors."""
+    def draw_legend_pil(self, draw: Any):
+        """Draw a legend showing hitbox types and their colors using PIL."""
         legend_x = self.width - 200
-        legend_y = 30
+        legend_y = 10
         
-        legend_items = [
-            ("Knight", self.colors['Knight']),
-            ("Enemy", self.colors['Enemy']),
-            ("Attack", self.colors['Attack']),
-            ("Terrain", self.colors['Terrain']),
-            ("Trigger", self.colors['Trigger']),
-            ("Breakable", self.colors['Breakable']),
-            ("Gate", self.colors['Gate']),
-            ("HazardRespawn", self.colors['HazardRespawn']),
-            ("Other", self.colors['Other'])
-        ]
+        draw.text((legend_x, legend_y), "Hitbox Types:", fill=(255, 255, 255), font=self.font)
         
-        self.draw_text("Legend:", legend_x, legend_y)
-        
-        for i, (label, color) in enumerate(legend_items):
-            y_pos = legend_y + 25 + i * 20
-            # Draw color box
-            cv2.rectangle(self.canvas, (legend_x, y_pos - 10), 
-                         (legend_x + 15, y_pos), color, -1)
-            # Draw label
-            self.draw_text(label, legend_x + 20, y_pos, font_scale=0.4)
+        y_offset = legend_y + 25
+        for hitbox_type in sorted(HITBOX_TYPES.values(), key=lambda x: x.depth):
+            # Draw colored square
+            color_rect = [legend_x, y_offset, legend_x + 12, y_offset + 12]
+            draw.rectangle(color_rect, fill=hitbox_type.color, outline=(255, 255, 255))
+            
+            # Draw type name
+            draw.text((legend_x + 18, y_offset - 2), hitbox_type.name, fill=(255, 255, 255), font=self.small_font)
+            
+            y_offset += 16
     
-    def draw_camera_info(self):
-        """Draw camera position information."""
-        camera_text = f"Camera: ({self.camera_x:.1f}, {self.camera_y:.1f})"
-        self.draw_text(camera_text, 10, self.height - 20, font_scale=0.5)
+    def draw_no_data_message(self, draw: Any):
+        """Draw a message when no data is available."""
+        message = "Waiting for game data..."
+        
+        # Get text size for centering
+        bbox = draw.textbbox((0, 0), message, font=self.font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        x = (self.width - text_width) // 2
+        y = (self.height - text_height) // 2
+        
+        draw.text((x, y), message, fill=(255, 255, 255), font=self.font)
 
 
-def draw_game_state(state_data: Dict[str, Any], 
-                   width: int = 1200, height: int = 800, 
-                   scale: float = 50.0) -> np.ndarray:
-    """
-    Convenience function to draw a single game state.
+def main():
+    """Main entry point - creates a standalone read-only visualization window."""
+    import argparse
     
-    Args:
-        state_data: Dictionary containing game state data
-        width: Canvas width in pixels
-        height: Canvas height in pixels
-        scale: Scaling factor for game coordinates
-        
-    Returns:
-        numpy array representing the visualization
-    """
-    visualizer = GameStateVisualizer(width, height, scale)
-    return visualizer.visualize_state(state_data)
-
-
-def load_and_visualize_jsonl(file_path: str, frame_index: int = 0) -> np.ndarray:
-    """
-    Load a JSONL file and visualize a specific frame.
+    parser = argparse.ArgumentParser(description='Hollow Knight Abstraction-style Visualizer')
+    parser.add_argument('--host', default='localhost', help='Host to connect to')
+    parser.add_argument('--port', type=int, default=9999, help='Port to connect to')
+    parser.add_argument('--width', type=int, default=1200, help='Window width')
+    parser.add_argument('--height', type=int, default=800, help='Window height')
+    parser.add_argument('--scale', type=float, default=15.0, help='Pixels per game unit')
     
-    Args:
-        file_path: Path to the JSONL file
-        frame_index: Index of the frame to visualize (0-based)
-        
-    Returns:
-        numpy array representing the visualization
-    """
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
+    args = parser.parse_args()
     
-    if frame_index >= len(lines):
-        raise IndexError(f"Frame index {frame_index} out of range. File has {len(lines)} frames.")
+    print("Starting Hollow Knight Abstraction Visualizer...")
+    print(f"Connecting to {args.host}:{args.port}")
+    print("Press 'q' to quit, 's' to save screenshot")
+    print("=" * 50)
     
-    # Parse the JSON line (note: the format seems to use single quotes, so we need eval)
-    line = lines[frame_index].strip()
+    # Import bridge here to avoid circular imports
+    from .bridge import HKBridge
+    
+    bridge = None
     try:
-        state_data = json.loads(line.replace("'", '"'))
-    except json.JSONDecodeError:
-        # If JSON parsing fails, try eval (less safe but handles the single quote format)
-        state_data = eval(line)
-    
-    return draw_game_state(state_data)
-
-
-def create_video_from_jsonl(file_path: str, output_path: str = "game_visualization.mp4",
-                           fps: int = 30, width: int = 1200, height: int = 800) -> None:
-    """
-    Create a video from all frames in a JSONL file.
-    
-    Args:
-        file_path: Path to the JSONL file
-        output_path: Path for the output video file
-        fps: Frames per second for the video
-        width: Canvas width in pixels
-        height: Canvas height in pixels
-    """
-    # Initialize video writer
-    fourcc = cv2.VideoWriter.fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    
-    visualizer = GameStateVisualizer(width, height)
-    
-    with open(file_path, 'r') as f:
-        for line_num, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-                
-            try:
-                # Parse the JSON line
-                try:
-                    state_data = json.loads(line.replace("'", '"'))
-                except json.JSONDecodeError:
-                    state_data = eval(line)
-                
-                # Create frame
-                frame = visualizer.visualize_state(state_data)
-                
-                # Add frame number
-                cv2.putText(frame, f"Frame: {line_num}", (10, height - 20), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-                
-                # Write frame to video
-                out.write(frame)
-                
-                print(f"Processed frame {line_num}")
-                
-            except Exception as e:
-                print(f"Error processing line {line_num}: {e}")
-                continue
-    
-    # Release everything
-    out.release()
-    print(f"Video saved to {output_path}")
-
-
-if __name__ == "__main__":
-    # Example usage: if a JSONL file is provided, visualize it; otherwise run live viewer
-    import sys
-    from time import sleep
-    try:
-        from csc316_final_project.bridge import HKBridge
-    except Exception:
-        # fallback to relative import
-        from .bridge import HKBridge
-
-    if len(sys.argv) > 1:
-        file_path = sys.argv[1]
-        frame_index = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-        # Visualize a single frame from JSONL
-        frame = load_and_visualize_jsonl(file_path, frame_index)
-        cv2.imshow(f'Game State - Frame {frame_index}', frame)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        cv2.imwrite(f'game_state_frame_{frame_index}.png', frame)
-        print(f"Frame saved as game_state_frame_{frame_index}.png")
-    else:
-        # Live viewer using HKBridge
-        bridge = HKBridge(host='localhost', port=9999)
-        while not bridge.connected:
-            print("Waiting for connection to game...")
-            sleep(1)
-        print("Connected to game. Starting live view. Press 'q' to quit, 's' to save frame.")
-
-        vis = GameStateVisualizer(width=1200, height=800, scale=20.0)
+        # Create bridge connection
+        bridge = HKBridge(host=args.host, port=args.port, auto_listen=True)
+        
+        # Initialize visualizer
+        visualizer = GameStateVisualizer(width=args.width, height=args.height, scale=args.scale)
+        
+        # Create window
+        window_name = "Hollow Knight - Abstraction Visualizer"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, args.width, args.height)
+        
         frame_count = 0
-        try:
-            while True:
-                try:
-                    state = bridge.get_state() or {}
-                    print(f"Frame {frame_count}: Got state with {len(state.get('hitboxes', []) or [])} hitboxes, {len(state.get('enemies', []) or [])} enemies")
-                    frame = vis.visualize_state(state)
-                    cv2.putText(frame, f"Frame: {frame_count}", (10, vis.height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
-                    cv2.imshow("Hollow Knight Live View", frame)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key == ord('q'):
-                        print("Quit key pressed")
-                        break
-                    elif key == ord('s'):
-                        filename = f"live_frame_{frame_count:04d}.png"
-                        cv2.imwrite(filename, frame)
-                        print(f"Saved {filename}")
-                    frame_count += 1
-                    sleep(0.033)
-                except KeyboardInterrupt:
-                    print("\nKeyboard interrupt received")
+        last_data_time = time.time()
+        
+        print("Waiting for game connection...")
+        
+        while True:
+            try:
+                # Get current state from bridge
+                state = bridge.get_state()
+                
+                if state:
+                    last_data_time = time.time()
+                    if frame_count % 60 == 0:  # Log every 60 frames (about once per second)
+                        hitbox_count = len(state.get('hitboxes', []))
+                        enemy_count = len(state.get('enemies', []))
+                        print(f"Frame {frame_count}: {hitbox_count} hitboxes, {enemy_count} enemies")
+                        
+                        # Debug: show some hitbox types
+                        hitboxes = state.get('hitboxes', [])
+                        if hitboxes:
+                            type_counts = {}
+                            for hitbox in hitboxes:
+                                hitbox_type = hitbox.get('type', 'Other')
+                                type_counts[hitbox_type] = type_counts.get(hitbox_type, 0) + 1
+                            print(f"  Hitbox types: {dict(sorted(type_counts.items()))}")
+                            
+                            # Show a few example hitboxes
+                            for i, hitbox in enumerate(hitboxes[:3]):
+                                bounds = hitbox.get('bounds', {})
+                                print(f"  Example {i+1}: {hitbox.get('name', 'Unknown')} ({hitbox.get('type', 'Other')}) at ({bounds.get('x', 0):.1f}, {bounds.get('y', 0):.1f}) size ({bounds.get('w', 0):.1f}x{bounds.get('h', 0):.1f})")
+                
+                # Visualize the state (even if empty - shows waiting message)
+                frame = visualizer.visualize_state(state)
+                
+                # Add connection status and frame info
+                connection_status = "Connected" if bridge.connected else "Waiting for connection..."
+                connection_color = (0, 255, 0) if bridge.connected else (0, 165, 255)  # Green if connected, orange if waiting
+                
+                cv2.putText(frame, connection_status, (10, args.height - 60), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, connection_color, 2)
+                
+                cv2.putText(frame, f"Frame: {frame_count}", (10, args.height - 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                
+                # Show timeout warning if no data for a while
+                if bridge.connected and time.time() - last_data_time > 5.0:
+                    cv2.putText(frame, "No data received for 5+ seconds", (10, args.height - 90), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                
+                # Display the frame
+                cv2.imshow(window_name, frame)
+                
+                # Handle key presses
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q') or key == 27:  # 'q' or ESC
+                    print("Quit key pressed")
                     break
-                except Exception as e:
-                    print(f"Error getting/displaying state: {e}")
-                    sleep(1)
-        finally:
+                elif key == ord('s'):
+                    # Save screenshot
+                    filename = f"hk_abstraction_frame_{frame_count:04d}.png"
+                    cv2.imwrite(filename, frame)
+                    print(f"Saved screenshot: {filename}")
+                
+                frame_count += 1
+                time.sleep(0.033)  # ~30 FPS
+                
+            except KeyboardInterrupt:
+                print("\nKeyboard interrupt received")
+                break
+            except Exception as e:
+                print(f"Error in visualization loop: {e}")
+                time.sleep(1)  # Wait a bit before retrying
+                
+    except Exception as e:
+        print(f"Failed to start visualizer: {e}")
+        print("Make sure the game is running with the SuperFancyInteropMod loaded")
+        return 1
+    finally:
+        if bridge is not None:
             try:
                 bridge.close()
-            except Exception:
+            except:
                 pass
-            cv2.destroyAllWindows()
+        cv2.destroyAllWindows()
+        print("Visualizer closed")
+    
+    return 0
+
+
+# For compatibility with bridge.py
+HollowKnightVisualizer = GameStateVisualizer
+
+
+if __name__ == '__main__':
+    main()
