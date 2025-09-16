@@ -4,11 +4,13 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from datetime import datetime, timedelta
+from PIL import Image, ImageGrab
 
 from csc316_final_project.keyboard_emulation import HollowKnightController
 
 class HollowNN(nn.Module):
     def __init__(self, input_shape, num_actions=7):
+        # num_actions corresponds to: left, right, up, down, jump, attack, focus
         super().__init__()
         c, h, w = input_shape
         self.net = nn.Sequential(
@@ -36,70 +38,105 @@ def reward_function(state, prev_state):
     reward -= 0.1  # small time penalty to encourage faster completion
     return reward
 
-def train(model: HollowNN, bridge: HKBridge, controller: HollowKnightController, episodes=1000, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5)):
+def get_screen_and_state():
+    # take a screenshot and process it into the state representation
+    screenshot = ImageGrab.grab()
+    screenshot = screenshot.resize((84, 84)).convert('RGB')
+    screen = np.array(screenshot).transpose((2, 0, 1)) / 255.0  # Normalize to [0, 1]
+
+    # TODO: Extract actual game state from screenshot
+    # For now, return dummy state - you'll need to implement state extraction
+    state = {
+        'player_health': 1.0,  # placeholder
+        'enemy_health': 1.0,   # placeholder
+    }
+
+    return screen, state
+
+def train(model: HollowNN, controller: HollowKnightController, episodes=1000, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5), epsilon=0.05, action_threshold=0.5):
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    loss_fn = nn.MSELoss()
+    action_keys = ['left', 'right', 'up', 'down', 'jump', 'attack', 'focus']
+    num_actions = len(action_keys)
 
     for episode in range(episodes):
         controller.press_key('load')
-        # Wait a moment to load
         sleep(1)
-        state = bridge.get_state()
+
+        screen, state = get_screen_and_state()
         done = False
         total_reward = 0
         start_time = datetime.now()
 
         while not done:
-            state_tensor = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
-            q_values = model(state_tensor)
-            actions = q_values.detach() # left, right, up, down, jump, attack, focus
+            # prepare tensors
+            state_tensor = torch.from_numpy(screen).unsqueeze(0).float()  # [1, C, H, W]
+            q_values = model(state_tensor)  # [1, num_actions]
 
-            controller.output(
-                {
-                    'left': actions[0][0] > 0,
-                    'right': actions[0][1] > 0,
-                    'up': actions[0][2] > 0,
-                    'down': actions[0][3] > 0,
-                    'jump': actions[0][4] > 0,
-                    'attack': actions[0][5] > 0,
-                    'focus': actions[0][6] > 0
-                }
-            )
-            next_state, reward, done = bridge.get_state()
-            if datetime.now() - start_time > max_episode_time or :
-                done = True  # End episode if it exceeds max time
+            # convert to probabilities (independent per-action) and choose multi-action (multi-hot)
+            probs = torch.sigmoid(q_values).detach().cpu().numpy()[0]  # [num_actions]
+            actions = probs > action_threshold  # greedy multi-label decision
+
+            # epsilon exploration: with prob epsilon flip each action to a random boolean
+            for i in range(num_actions):
+                if np.random.rand() < epsilon:
+                    actions[i] = np.random.rand() < 0.5
+
+            # ensure at least one action (optional)
+            # if not actions.any():
+            #     actions[int(np.argmax(probs))] = True
+
+            # map multi-hot actions to controller outputs
+            controls = {k: False for k in action_keys}
+            for i, key in enumerate(action_keys):
+                if actions[i]:
+                    controls[key] = True
+
+            controller.output(controls)
+
+            # give the game a short time to update, then observe next state
+            sleep(0.05) # about 20 FPS - not including overhead
+            next_screen, next_state = get_screen_and_state()
+
+            # check terminal conditions
+            if datetime.now() - start_time > max_episode_time or next_state.get('player_health', 1) <= 0:
+                done = True
 
             reward = reward_function(next_state, state)
             total_reward += reward
 
-            next_state_tensor = torch.FloatTensor(next_state).unsqueeze(0)
-            next_q_values = model(next_state_tensor)
-            max_next_q_value = torch.max(next_q_values).item()
-
-            target_q_value = reward + (gamma * max_next_q_value * (1 - int(done)))
-            target_q_values = q_values.clone().detach()
-            target_q_values[0][action] = target_q_value
-
-            loss = loss_fn(q_values, target_q_values)
+            # Fixed approach: Use binary cross-entropy for multi-label classification
+            # Create target actions based on reward feedback
+            target_actions = torch.tensor(actions, dtype=torch.float32).unsqueeze(0)
+            
+            # Adjust targets based on reward
+            if reward > 0:
+                # Positive reward: reinforce actions taken (keep targets as 1.0 for taken actions)
+                pass
+            elif reward < 0:
+                # Negative reward: discourage actions taken (flip targets for taken actions)
+                target_actions = 1.0 - target_actions
+            # If reward == 0, keep original targets
+            
+            # Use sigmoid activation and binary cross-entropy loss
+            action_probs = torch.sigmoid(q_values)
+            loss = torch.nn.functional.binary_cross_entropy(action_probs, target_actions)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            state = next_state
+            # advance to next step
+            screen, state = next_screen, next_state
 
-        print(f"Episode {episode+1}/{episodes}, Total Reward: {total_reward}")
+        print(f"Episode {episode+1}/{episodes}, Total Reward: {total_reward:.2f}")
+        if (episode + 1) % 10 == 0:
+            torch.save(model.state_dict(), f"hollow_nn_episode_{episode+1}.pth")
+
 
 if __name__ == "__main__":
     input_shape = (3, 84, 84)
     num_actions = 7
     model = HollowNN(input_shape, num_actions)
     controller = HollowKnightController()
-    while not bridge.connected:
-        print("Waiting for connection to game...")
-        sleep(1)
     input("Press Enter to start training...")
-    try:
-        train(model, bridge, controller)
-    finally:
-        bridge.close()
+    train(model, controller)
