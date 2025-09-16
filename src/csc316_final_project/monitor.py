@@ -5,6 +5,10 @@ from rich.layout import Layout
 from rich.panel import Panel
 from datetime import datetime, timedelta
 from time import sleep
+from multiprocessing import Process
+import socket
+import pickle
+
 
 class Monitor:
     def __init__(self):
@@ -63,6 +67,3 @@ def run_monitor() -> None:
         while True:
             live.update(monitor.update())
             sleep(.1)
-
-if __name__ == "__main__":
-    main()

@@ -5,7 +5,6 @@ import torch.optim as optim
 import numpy as np
 from datetime import datetime, timedelta
 
-from csc316_final_project.bridge import HKBridge
 from csc316_final_project.keyboard_emulation import HollowKnightController
 
 class HollowNN(nn.Module):
@@ -23,6 +22,19 @@ class HollowNN(nn.Module):
 
     def forward(self, x):
         return self.net(x) # how's that for a one-liner?
+
+def reward_function(state, prev_state):
+    # reward for dealing damage or healing,
+    # punish for taking damage, and a small punish for time
+    reward = 0
+    if state['enemy_health'] < prev_state['enemy_health']:
+        reward += (prev_state['enemy_health'] - state['enemy_health']) * 10 # 10xdamage dealt reward
+    if state['player_health'] > prev_state['player_health']:
+        reward += (state['player_health'] - prev_state['player_health']) * 5 # 5xhealth gained reward
+    if state['player_health'] < prev_state['player_health']:
+        reward -= (prev_state['player_health'] - state['player_health']) * 7 # 7xhealth lost penalty
+    reward -= 0.1  # small time penalty to encourage faster completion
+    return reward
 
 def train(model: HollowNN, bridge: HKBridge, controller: HollowKnightController, episodes=1000, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5)):
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -54,9 +66,10 @@ def train(model: HollowNN, bridge: HKBridge, controller: HollowKnightController,
                 }
             )
             next_state, reward, done = bridge.get_state()
-            if datetime.now() - start_time > max_episode_time:
+            if datetime.now() - start_time > max_episode_time or :
                 done = True  # End episode if it exceeds max time
 
+            reward = reward_function(next_state, state)
             total_reward += reward
 
             next_state_tensor = torch.FloatTensor(next_state).unsqueeze(0)
@@ -81,7 +94,6 @@ if __name__ == "__main__":
     input_shape = (3, 84, 84)
     num_actions = 7
     model = HollowNN(input_shape, num_actions)
-    bridge = HKBridge(host='localhost', port=9999)
     controller = HollowKnightController()
     while not bridge.connected:
         print("Waiting for connection to game...")
