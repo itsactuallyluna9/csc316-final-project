@@ -14,7 +14,7 @@ def cli() -> None:
     pass
 
 @cli.command()
-@click.option('--previous', type=click.Path(exists=True, dir_okay=False, path_type=click.Path), help='Path to a previously saved model to continue training from', required=False)
+@click.option('--previous', type=click.Path(exists=True, dir_okay=False), help='Path to a previously saved model to continue training from', required=False)
 @click.option('--episodes', default=1000, help='Number of training episodes')
 @click.option('--start-episode', default=0, help='Start at episode number (for continuing training from a saved model)')
 @click.option('--obs', is_flag=True, help='Run with automatic OBS recordings')
