@@ -4,7 +4,7 @@ import glob
 import random
 import json
 import shutil
-from tqdm import tqdm 
+from tqdm import tqdm
 import numpy as np
 
 

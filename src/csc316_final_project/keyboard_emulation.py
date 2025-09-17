@@ -28,7 +28,7 @@ class HollowKnightController:
             if key not in self.pressed_keys:
                 self.kb.press(key)
                 self.pressed_keys.add(key)
-                print(f"Pressed: {action}")
+                # print(f"Pressed: {action}")
     
     def release_key(self, action):
         if action in self.key_map:
@@ -36,7 +36,7 @@ class HollowKnightController:
             if key in self.pressed_keys:
                 self.kb.release(key)
                 self.pressed_keys.discard(key)
-                print(f"Released: {action}")
+                # print(f"Released: {action}")
     
     def release_all(self):
         for key in self.pressed_keys.copy():
