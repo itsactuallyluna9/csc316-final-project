@@ -20,10 +20,10 @@ def cli() -> None:
 @click.option('--obs', is_flag=True, help='Run with automatic OBS recordings')
 @click.option('--obs-every-n', default=5, help='Record to OBS every N episodes')
 @click.option('--monitor-panel', is_flag=True, help='Show the monitor panel during training')
-def train(previous: click.Path, episodes: int = 1000, start_episode: int = 0, obs=False, obs_every_n=5, monitor_panel=False) -> None:
+def train(previous: str, episodes: int = 1000, start_episode: int = 0, obs=False, obs_every_n=5, monitor_panel=False) -> None:
     input_shape = (3, 84, 84)
     model = HollowNN(input_shape)
-    if previous.exists:
+    if previous:
         model.load_state_dict(torch.load(str(previous)))
         print(f"Loaded model from {previous}")
     controller = HollowKnightController()
@@ -39,7 +39,7 @@ def train(previous: click.Path, episodes: int = 1000, start_episode: int = 0, ob
     sleep(2)
 
     with IdleLock():
-        train_model(model, controller, obs_bridge, fk_detect_model, episodes)
+        train_model(model, controller, obs_bridge, fk_detect_model, episodes, start_episode=start_episode)
 
 def run():
     pass

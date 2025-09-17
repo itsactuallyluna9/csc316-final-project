@@ -67,7 +67,7 @@ def get_screen_and_state(fk_detect_model):
 
     return screen, state
 
-def train_model(model: HollowNN, controller: HollowKnightController, obs_manager, fk_detect_model, episodes=1000, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5), epsilon=0.05, action_threshold=0.5):
+def train_model(model: HollowNN, controller: HollowKnightController, obs_manager, fk_detect_model, episodes=1000, start_episode=0, gamma=0.99, lr=1e-4, max_episode_time=timedelta(minutes=5), epsilon=0.05, action_threshold=0.5):
     device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
     model = model.to(device)
     print(f"Using {device} device")
@@ -77,7 +77,7 @@ def train_model(model: HollowNN, controller: HollowKnightController, obs_manager
     num_actions = len(action_keys)
     send_info({'spawn_time': datetime.now().isoformat()})
 
-    for episode in range(episodes):
+    for episode in range(start_episode, episodes):
         if obs_manager:
             obs_manager.start_record(episode_num=episode)
         controller.press_key('load')
